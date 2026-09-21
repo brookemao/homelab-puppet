@@ -4,7 +4,7 @@
 #
 # 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
 # 2. Prompts for required secrets (Cloudflare API Key for ddclient)
-# 3. Executes masterless run with sudo (`sudo openvox apply`)
+# 3. Executes masterless run with sudo (`sudo puppet apply`)
 #
 
 set -euo pipefail
@@ -49,8 +49,8 @@ echo ""
 # ------------------------------------------------------------------
 info "Step 1/3: Checking OpenVox installation..."
 
-if $SUDO openvox --version &>/dev/null; then
-    ok "OpenVox is already installed: $($SUDO openvox --version 2>/dev/null)"
+if $SUDO puppet --version &>/dev/null; then
+    ok "OpenVox (puppet) is already installed: $($SUDO puppet --version 2>/dev/null)"
 else
     info "OpenVox not found. Installing openvox-agent via DNF with sudo..."
 
@@ -79,8 +79,8 @@ else
     info "Installing openvox-agent package with sudo..."
     $SUDO dnf install -y openvox-agent
 
-    if $SUDO openvox --version &>/dev/null; then
-        ok "OpenVox installed successfully: $($SUDO openvox --version 2>/dev/null)"
+    if $SUDO puppet --version &>/dev/null; then
+        ok "OpenVox (puppet) installed successfully: $($SUDO puppet --version 2>/dev/null)"
     else
         err "Failed to verify OpenVox installation."
         exit 1
@@ -152,7 +152,7 @@ ENV_VARS+=("FACTER_ddclient_replace_config=true")
 
 # Run apply directly with sudo
 $SUDO "${ENV_VARS[@]}" \
-    openvox apply \
+    puppet apply \
     --modulepath "${PROJECT_ROOT}/modules" \
     --hiera_config "${PROJECT_ROOT}/hiera.yaml" \
     "$@" \

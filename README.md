@@ -1,8 +1,8 @@
 # Homelab OpenVox (Masterless) Configuration for RHEL 10
 
-Standalone masterless [OpenVox](https://voxpupuli.org/openvox/) automation (`openvox apply`) to configure a baseline RHEL 10 (or Rocky Linux 10 / AlmaLinux 10 / CentOS Stream 10) system.
+Standalone masterless [OpenVox](https://voxpupuli.org/openvox/) automation (`puppet apply`) to configure a baseline RHEL 10 (or Rocky Linux 10 / AlmaLinux 10 / CentOS Stream 10) system.
 
-[OpenVox](https://voxpupuli.org/openvox/) is the fully open source, community-governed configuration management platform maintained by [Vox Pupuli](https://voxpupuli.org/). Because legacy configuration management packages are not distributed in standard RHEL 10 repositories, this project exclusively uses **OpenVox 8** via [Vox Pupuli's YUM repository](https://voxpupuli.org/openvox/install/).
+[OpenVox](https://voxpupuli.org/openvox/) is the fully open source, community-governed configuration management platform maintained by [Vox Pupuli](https://voxpupuli.org/). Because legacy configuration management packages are not distributed in standard RHEL 10 repositories, this project exclusively uses **OpenVox 8** via [Vox Pupuli's YUM repository](https://voxpupuli.org/openvox/install/). (OpenVox packages provide the drop-in CLI executable as `puppet`).
 
 OpenVox maintains complete compatibility with declarative manifests and Hiera data while removing proprietary dependencies and commercial repository restrictions.
 
@@ -27,7 +27,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 ├── environment.conf            # Environment modulepath definition
 ├── hiera.yaml                  # Hiera 5 hierarchy configuration
 ├── manifests/
-│   └── site.pp                 # Masterless manifest entrypoint for `openvox apply`
+│   └── site.pp                 # Masterless manifest entrypoint for `puppet apply`
 ├── modules/
 │   └── homelab/
 │       ├── manifests/
@@ -53,7 +53,7 @@ The easiest way to bootstrap and configure a fresh RHEL 10 machine is using `boo
 1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-el-10.noarch.rpm`) and `openvox-agent` via DNF with sudo.
 2. Securely prompts for your Cloudflare API key / token (or reads from `CLOUDFLARE_API_KEY`).
 3. Saves the token to `data/secrets.yaml` (mode `0660`, gitignored).
-4. Executes masterless apply with sudo (`sudo openvox apply`).
+4. Executes masterless apply with sudo (`sudo puppet apply`).
 
 ```bash
 chmod +x bootstrap/bootstrap.sh
@@ -76,11 +76,11 @@ CLOUDFLARE_API_KEY='your_api_token' ./bootstrap/bootstrap.sh
 
 ### 2. Standalone Execution
 
-If OpenVox (`openvox-agent`) is already installed on the system, you can run `openvox apply` directly:
+If OpenVox (`openvox-agent`) is already installed on the system, you can run `puppet apply` directly:
 
 ```bash
 sudo env PATH='/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin' \
-         openvox apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
+         puppet apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
 ```
 
 You can supply or override the Cloudflare token and settings using environment variables:
@@ -89,7 +89,7 @@ You can supply or override the Cloudflare token and settings using environment v
 sudo env PATH='/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin' \
          FACTER_cloudflare_token='your_real_api_token_here' \
          FACTER_ddclient_replace_config=true \
-         openvox apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
+         puppet apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
 ```
 
 ---
