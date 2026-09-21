@@ -7,11 +7,3 @@ targets:
     name: localhost
     config:
       transport: local
-
-groups:
-  - name: local
-    targets:
-      - localhost
-  - name: rhel10
-    targets:
-      - localhost

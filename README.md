@@ -92,14 +92,6 @@ targets:
     name: localhost
     config:
       transport: local
-
-groups:
-  - name: local
-    targets:
-      - localhost
-  - name: rhel10
-    targets:
-      - localhost
 ```
 
 *(Note: If you ever wish to target a remote machine over SSH instead, you can change `transport: ssh` and configure SSH credentials in `inventory.yaml`).*
