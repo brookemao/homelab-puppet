@@ -28,28 +28,36 @@ class homelab::ddclient (
   # Common directories
   file { '/etc/ddclient':
     ensure => directory,
-    owner  => 'root',
-    group  => 'root',
-    mode   => '0700',
+    owner  => 'ddclient',
+    group  => 'ddclient',
+    mode   => '0750',
   }
 
   file { '/var/cache/ddclient':
-    ensure => directory,
-    owner  => 'ddclient',
-    group  => 'ddclient',
-    mode   => '0755',
+    ensure  => directory,
+    owner   => 'ddclient',
+    group   => 'ddclient',
+    mode    => '0755',
+    recurse => true,
   }
 
   file { '/usr/local/src':
     ensure => directory,
   }
 
+  # Clean up duplicate /etc/ddclient/ddclient directory created by prior build with --sysconfdir=/etc/ddclient
+  file { '/etc/ddclient/ddclient':
+    ensure => absent,
+    force  => true,
+    backup => false,
+  }
+
   # Configuration file with Cloudflare credentials/snippet
   # replace => false ensures that user modifications / API credentials are preserved across runs unless replace_config is true
   file { '/etc/ddclient/ddclient.conf':
     ensure  => file,
-    owner   => 'root',
-    group   => 'root',
+    owner   => 'ddclient',
+    group   => 'ddclient',
     mode    => '0600',
     content => epp('homelab/ddclient.conf.epp', {
       'cloudflare_token'   => $cloudflare_token,
@@ -58,6 +66,7 @@ class homelab::ddclient (
     }),
     replace => $replace_config,
     require => File['/etc/ddclient'],
+    notify  => Service['ddclient'],
   }
 
   if $install_method == 'tarball' {
@@ -125,9 +134,10 @@ class homelab::ddclient (
         if [ ! -f ./configure ] && [ -f ./autogen ]; then
           ./autogen
         fi
-        ./configure --prefix=/usr --sysconfdir=/etc/ddclient --localstatedir=/var
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var
         make
         make install
+        rm -rf /etc/ddclient/ddclient
 
         # Install systemd service from release archive
         if [ -f sample-etc_systemd.service ]; then
@@ -143,6 +153,7 @@ class homelab::ddclient (
         set -euo pipefail
         test -x /usr/bin/ddclient || exit 1
         test -f /etc/ddclient/.installed_tag || exit 1
+        test ! -d /etc/ddclient/ddclient || exit 1
 
         installed_tag=\$(cat /etc/ddclient/.installed_tag 2>/dev/null || true)
         test -n "\$installed_tag" || exit 1
