@@ -127,8 +127,8 @@ else
 ---
 homelab::cloudflare_token: '${CF_KEY}'
 EOF
-    chmod 600 "${PROJECT_ROOT}/data/secrets.yaml"
-    ok "Saved secret to ${PROJECT_ROOT}/data/secrets.yaml (mode 0600)."
+    chmod 660 "${PROJECT_ROOT}/data/secrets.yaml"
+    ok "Saved secret to ${PROJECT_ROOT}/data/secrets.yaml (mode 0660)."
 fi
 
 echo ""

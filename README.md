@@ -52,7 +52,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 The easiest way to bootstrap and configure a fresh RHEL 10 machine is using `bootstrap/bootstrap.sh`. It automatically:
 1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-el-10.noarch.rpm`) and `openvox-agent` via DNF.
 2. Securely prompts for your Cloudflare API key / token (or reads from `CLOUDFLARE_API_KEY`).
-3. Saves the token to `data/secrets.yaml` (mode `0600`, gitignored).
+3. Saves the token to `data/secrets.yaml` (mode `0660`, gitignored).
 4. Executes masterless apply with root privileges.
 
 ```bash
@@ -113,7 +113,7 @@ This project uses standard Hiera 5 data lookups.
   Create it from the example:
   ```bash
   cp data/secrets.yaml.example data/secrets.yaml
-  chmod 600 data/secrets.yaml
+  chmod 660 data/secrets.yaml
   ```
 
 ---
