@@ -1,7 +1,7 @@
 # Secrets
 data/secrets.yaml
 
-# Puppet cache and runtime directories
+# OpenVox cache and runtime directories
 .resource_types/
 .modules/
 log/

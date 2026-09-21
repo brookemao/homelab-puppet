@@ -1,7 +1,7 @@
 # @summary Standalone masterless OpenVox entrypoint
 #
 # Can be run directly with:
-#   sudo puppet apply --modulepath=modules manifests/site.pp
+#   sudo openvox apply --modulepath=modules manifests/site.pp
 #
 # Supports configuration via Hiera (data/common.yaml, data/secrets.yaml)
 # or environment variables (FACTER_cloudflare_token, FACTER_ddclient_replace_config).
