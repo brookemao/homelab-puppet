@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Configure sudo with explicit PATH to resolve system binaries
-SYS_PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin"
+SYS_PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin:/opt/puppetlabs/bin"
 SUDO=""
 if [[ $EUID -ne 0 ]]; then
     if command -v sudo &>/dev/null; then
