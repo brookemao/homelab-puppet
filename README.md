@@ -37,50 +37,18 @@ Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux
 
 ## Quick Start
 
-### 1. Configure Target Inventory
+This project is configured for **local execution** directly on the RHEL 10 machine you want to modify. It uses Puppet Bolt's native `transport: local`, so no SSH keys, SSH daemon, or network credentials are required.
 
-Edit `inventory.yaml` to specify your target host's IP address or hostname and SSH credentials:
+### 1. Run the Automated Bootstrap Script
 
-```yaml
-version: 2
-groups:
-  - name: rhel10
-    targets:
-      - uri: 192.168.1.50           # Target IP address or hostname
-        name: rhel10-node1
-    config:
-      transport: ssh
-      ssh:
-        user: root                   # Or non-root user (see sudo notes below)
-        private-key: ~/.ssh/id_ed25519
-        host-key-check: false
-```
-
-> **Note for Non-Root Users:** If connecting as a regular user with `sudo`, add:
-> ```yaml
-> user: admin
-> run-as: root
-> sudo-password: 'your_sudo_password'
-> ```
-
----
-
-### 2. Run the Automated Bootstrap Script
-
-A bootstrap script is included in `bootstrap/bootstrap.sh` that installs Puppet Bolt via DNF, prompts you securely for your Cloudflare API key, and launches the Bolt run:
+The easiest way to set up the system is using `bootstrap/bootstrap.sh`. It automatically installs Puppet Bolt via DNF, prompts you securely for your Cloudflare API key, and executes the Bolt plan with root privileges:
 
 ```bash
 chmod +x bootstrap/bootstrap.sh
 ./bootstrap/bootstrap.sh
 ```
 
-You can optionally pass a specific target group or host (default is `rhel10`):
-
-```bash
-./bootstrap/bootstrap.sh rhel10-node1
-```
-
-Or provide your Cloudflare token via environment variable to skip the prompt:
+You can also pass your Cloudflare token via environment variable to skip the interactive prompt:
 
 ```bash
 CLOUDFLARE_API_KEY='your_api_token' ./bootstrap/bootstrap.sh
@@ -88,19 +56,53 @@ CLOUDFLARE_API_KEY='your_api_token' ./bootstrap/bootstrap.sh
 
 ---
 
-### 3. Alternative: Running Bolt Directly
+### 2. Alternative: Running Bolt Directly
 
-If Puppet Bolt is already installed, you can execute the plan directly:
+If Puppet Bolt is already installed, you can execute the plan directly on the local machine (requires root or sudo for package and service management):
 
 ```bash
-bolt plan run homelab targets=rhel10
+sudo bolt plan run homelab
+```
+
+Or pass parameters directly on the CLI:
+
+```bash
+sudo bolt plan run homelab \
+  cloudflare_token='your_real_api_token_here' \
+  ddclient_replace_config=true
 ```
 
 Or using standalone `bolt apply`:
 
 ```bash
-bolt apply manifests/site.pp --targets rhel10
+sudo bolt apply manifests/site.pp --targets localhost
 ```
+
+---
+
+### 3. Target Inventory
+
+The default `inventory.yaml` targets `localhost` using `transport: local`:
+
+```yaml
+version: 2
+
+targets:
+  - uri: localhost
+    name: localhost
+    config:
+      transport: local
+
+groups:
+  - name: local
+    targets:
+      - localhost
+  - name: rhel10
+    targets:
+      - localhost
+```
+
+*(Note: If you ever wish to target a remote machine over SSH instead, you can change `transport: ssh` and configure SSH credentials in `inventory.yaml`).*
 
 ---
 
@@ -110,7 +112,7 @@ You can override default plan settings directly on the command line:
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `targets` | `TargetSpec` | `'rhel10'` | Group or list of hosts from `inventory.yaml` |
+| `targets` | `TargetSpec` | `'localhost'` | Target hosts or group (defaults to local machine) |
 | `manage_services` | `Boolean` | `true` | Whether to manage and enable background services |
 | `ddclient_install_method` | `String` | `'tarball'` | `'tarball'` (official GitHub release tarball) or `'package'` (dnf) |
 | `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag) or specific tag (e.g. `'v4.0.0'`) |
@@ -121,11 +123,9 @@ You can override default plan settings directly on the command line:
 
 ### Example: Running with Cloudflare Token
 
-You can either provide your Cloudflare token directly via Bolt:
-
 ```bash
-bolt plan run homelab \
-  targets=rhel10 \
+sudo bolt plan run homelab \
+  targets=localhost \
   cloudflare_token='your_real_api_token_here' \
   ddclient_replace_config=true
 ```

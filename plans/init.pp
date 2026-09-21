@@ -3,7 +3,7 @@
 # Dynamically resolves the latest release tag from GitHub before running puppet apply,
 # ensuring updates past 4.0.0 are automatically discovered and installed.
 #
-# @param targets Target hosts or group to configure (defaults to 'rhel10' from inventory.yaml)
+# @param targets Target hosts or group to configure (defaults to 'localhost' for local execution)
 # @param manage_services Whether to ensure services like fail2ban are enabled and started
 # @param ddclient_install_method 'tarball' (build/install from GitHub release tar) or 'package' (dnf)
 # @param ddclient_release_tag Specific tag like 'v4.0.0' or 'latest' to automatically query GitHub
@@ -12,7 +12,7 @@
 # @param cloudflare_domains Cloudflare subdomains to update
 # @param ddclient_replace_config Whether to overwrite /etc/ddclient/ddclient.conf if it exists
 plan homelab (
-  TargetSpec $targets                 = 'rhel10',
+  TargetSpec $targets                 = 'localhost',
   Boolean    $manage_services         = true,
   String[1]  $ddclient_install_method = 'tarball',
   String[1]  $ddclient_release_tag    = 'latest',

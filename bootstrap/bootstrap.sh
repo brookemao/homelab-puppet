@@ -127,16 +127,16 @@ echo ""
 # ------------------------------------------------------------------
 info "Step 3/3: Running Puppet Bolt plan..."
 
-# Allow passing custom targets as first argument, defaults to 'rhel10'
-TARGETS="${1:-rhel10}"
+# Allow passing custom targets as first argument, defaults to 'localhost'
+TARGETS="${1:-localhost}"
 
 info "Project Root: ${PROJECT_ROOT}"
-info "Target Group: ${TARGETS}"
+info "Target Host:  ${TARGETS}"
 
 cd "${PROJECT_ROOT}"
 
 # Execute the bolt plan with the gathered secret
-bolt plan run homelab \
+run_root bolt plan run homelab \
     targets="${TARGETS}" \
     cloudflare_token="${CF_KEY}" \
     ddclient_replace_config=true
