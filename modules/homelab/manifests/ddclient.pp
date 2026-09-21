@@ -86,40 +86,40 @@ class homelab::ddclient (
 
     # 2. Download release tarball for the tag, build, and install
     exec { 'install_ddclient_release_tar':
-      command  => @("CMD"/L),
+      command  => @("CMD"/$),
         set -euo pipefail
 
-        TARGET_TAG="${release_tag}"
-        if [ "\$TARGET_TAG" = "latest" ]; then
+        target_tag="${release_tag}"
+        if [ "\$target_tag" = "latest" ]; then
           echo "Resolving latest release tag from GitHub..."
-          RESOLVED=\$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/ddclient/ddclient/releases/latest 2>/dev/null | sed -e 's#.*/tag/##' || true)
-          if echo "\$RESOLVED" | grep -qE '^v?[0-9]'; then
-            TARGET_TAG="\$RESOLVED"
-            echo "Resolved latest tag: \${TARGET_TAG}"
+          resolved=\$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/ddclient/ddclient/releases/latest 2>/dev/null | sed -e 's#.*/tag/##' || true)
+          if echo "\$resolved" | grep -qE '^v?[0-9]'; then
+            target_tag="\$resolved"
+            echo "Resolved latest tag: \$target_tag"
           else
             echo "Could not dynamically resolve latest tag; falling back to v4.0.0"
-            TARGET_TAG="v4.0.0"
+            target_tag="v4.0.0"
           fi
         fi
 
-        VERSION=\$(echo "\$TARGET_TAG" | sed -e 's/^v//')
-        TARBALL="ddclient-\${VERSION}.tar.gz"
-        RELEASE_URL="https://github.com/ddclient/ddclient/releases/download/\${TARGET_TAG}/\${TARBALL}"
-        FALLBACK_URL="https://github.com/ddclient/ddclient/archive/refs/tags/\${TARGET_TAG}.tar.gz"
+        version=\$(echo "\$target_tag" | sed -e 's/^v//')
+        tarball="ddclient-\$version.tar.gz"
+        release_url="https://github.com/ddclient/ddclient/releases/download/\$target_tag/\$tarball"
+        fallback_url="https://github.com/ddclient/ddclient/archive/refs/tags/\$target_tag.tar.gz"
 
-        echo "Fetching ddclient release tarball for \${TARGET_TAG}..."
+        echo "Fetching ddclient release tarball for \$target_tag..."
         cd /usr/local/src
-        if ! curl -fsSL -o "\${TARBALL}" "\${RELEASE_URL}"; then
+        if ! curl -fsSL -o "\$tarball" "\$release_url"; then
           echo "Direct release asset not found, downloading source archive..."
-          curl -fsSL -o "\${TARBALL}" "\${FALLBACK_URL}"
+          curl -fsSL -o "\$tarball" "\$fallback_url"
         fi
 
         # Clean previous extraction if present
-        rm -rf "ddclient-\${VERSION}" "ddclient-\${TARGET_TAG}"
-        tar -xf "\${TARBALL}"
+        rm -rf "ddclient-\$version" "ddclient-\$target_tag"
+        tar -xf "\$tarball"
 
-        EXTRACT_DIR=\$(find . -maxdepth 1 -type d -name "ddclient-*" | head -n 1)
-        cd "\${EXTRACT_DIR}"
+        extract_dir=\$(find . -maxdepth 1 -type d -name "ddclient-*" | head -n 1)
+        cd "\$extract_dir"
 
         # Configure, make, and install
         if [ ! -f ./configure ] && [ -f ./autogen ]; then
@@ -136,28 +136,28 @@ class homelab::ddclient (
         fi
 
         # Record installed tag to ensure idempotency and detect future updates
-        echo "\${TARGET_TAG}" > /etc/ddclient/.installed_tag
-        echo "ddclient \${TARGET_TAG} successfully installed."
+        echo "\$target_tag" > /etc/ddclient/.installed_tag
+        echo "ddclient \$target_tag successfully installed."
         | CMD
-      unless   => @("UNLESS"/L),
+      unless   => @("UNLESS"/$),
         set -euo pipefail
         test -x /usr/bin/ddclient || exit 1
         test -f /etc/ddclient/.installed_tag || exit 1
 
-        INSTALLED_TAG=\$(cat /etc/ddclient/.installed_tag 2>/dev/null || true)
-        test -n "\$INSTALLED_TAG" || exit 1
+        installed_tag=\$(cat /etc/ddclient/.installed_tag 2>/dev/null || true)
+        test -n "\$installed_tag" || exit 1
 
-        TARGET_TAG="${release_tag}"
-        if [ "\$TARGET_TAG" = "latest" ]; then
-          RESOLVED=\$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/ddclient/ddclient/releases/latest 2>/dev/null | sed -e 's#.*/tag/##' || true)
-          if echo "\$RESOLVED" | grep -qE '^v?[0-9]'; then
-            TARGET_TAG="\$RESOLVED"
+        target_tag="${release_tag}"
+        if [ "\$target_tag" = "latest" ]; then
+          resolved=\$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/ddclient/ddclient/releases/latest 2>/dev/null | sed -e 's#.*/tag/##' || true)
+          if echo "\$resolved" | grep -qE '^v?[0-9]'; then
+            target_tag="\$resolved"
           else
-            TARGET_TAG="\$INSTALLED_TAG"
+            target_tag="\$installed_tag"
           fi
         fi
 
-        [ "\$INSTALLED_TAG" = "\$TARGET_TAG" ]
+        [ "\$installed_tag" = "\$target_tag" ]
         | UNLESS
       provider => 'shell',
       path     => ['/usr/bin', '/usr/sbin', '/bin', '/sbin'],
