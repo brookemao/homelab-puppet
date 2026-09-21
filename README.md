@@ -2,7 +2,9 @@
 
 Standalone masterless [OpenVox](https://voxpupuli.org/openvox/) automation (`puppet apply`) to configure a baseline RHEL 10 (or Rocky Linux 10 / AlmaLinux 10 / CentOS Stream 10) system.
 
-[OpenVox](https://voxpupuli.org/openvox/) is the fully open source, community-governed alternative and direct drop-in replacement for Puppet maintained by [Vox Pupuli](https://voxpupuli.org/). It runs existing Puppet manifests and modules natively while being 100% open source.
+[OpenVox](https://voxpupuli.org/openvox/) is the fully open source, community-governed alternative and direct drop-in replacement for Puppet maintained by [Vox Pupuli](https://voxpupuli.org/). Because legacy Puppet packages are no longer distributed in standard RHEL 10 repositories, this project exclusively uses **OpenVox 8** via [Vox Pupuli's YUM repository](https://voxpupuli.org/openvox/install/).
+
+OpenVox maintains complete compatibility with declarative manifests and Hiera data while removing proprietary dependencies and commercial repository restrictions.
 
 ### Managed Components:
 - **EPEL 10 Repository**: Enables CodeReady Builder (CRB) and installs the EPEL 10 release package with automated metadata cache refresh.

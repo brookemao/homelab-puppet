@@ -1,4 +1,4 @@
-# @summary Standalone masterless Puppet entrypoint
+# @summary Standalone masterless OpenVox entrypoint
 #
 # Can be run directly with:
 #   sudo puppet apply --modulepath=modules manifests/site.pp

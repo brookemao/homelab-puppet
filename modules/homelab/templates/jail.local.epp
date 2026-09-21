@@ -5,7 +5,7 @@
       String  $backend,
 | -%>
 # /etc/fail2ban/jail.local
-# Managed by Puppet Bolt - manual edits will be overwritten
+# Managed by OpenVox - manual edits will be overwritten
 
 [DEFAULT]
 # Ban time in seconds

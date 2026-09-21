@@ -53,7 +53,7 @@ info "Step 1/3: Checking OpenVox installation..."
 PUPPET_BIN="$(command -v puppet || command -v openvox || echo "/opt/puppetlabs/bin/puppet")"
 
 if command -v "$PUPPET_BIN" &>/dev/null || [[ -x "$PUPPET_BIN" ]]; then
-    ok "OpenVox / Puppet is already installed: $($PUPPET_BIN --version)"
+    ok "OpenVox is already installed: $($PUPPET_BIN --version)"
 else
     info "OpenVox not found. Installing openvox-agent via DNF..."
 
@@ -85,9 +85,12 @@ else
     # Ensure /opt/puppetlabs/bin and /opt/openvox/bin are accessible
     export PATH="/opt/puppetlabs/bin:/opt/openvox/bin:${PATH}"
 
-    # Create convenient symlink in /usr/local/bin if not present
+    # Create convenient symlinks in /usr/local/bin if not present
     if [[ -x /opt/puppetlabs/bin/puppet ]] && [[ ! -e /usr/local/bin/puppet ]]; then
         run_root ln -sf /opt/puppetlabs/bin/puppet /usr/local/bin/puppet || true
+    fi
+    if [[ -x /opt/puppetlabs/bin/puppet ]] && [[ ! -e /usr/local/bin/openvox ]]; then
+        run_root ln -sf /opt/puppetlabs/bin/puppet /usr/local/bin/openvox || true
     fi
 
     PUPPET_BIN="$(command -v puppet || command -v openvox || echo "/opt/puppetlabs/bin/puppet")"
