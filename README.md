@@ -79,13 +79,15 @@ CLOUDFLARE_API_KEY='your_api_token' ./bootstrap/bootstrap.sh
 If OpenVox (`openvox-agent`) is already installed on the system, you can run `openvox apply` directly:
 
 ```bash
-sudo openvox apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
+sudo env PATH='/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin' \
+         openvox apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
 ```
 
 You can supply or override the Cloudflare token and settings using environment variables:
 
 ```bash
-sudo env FACTER_cloudflare_token='your_real_api_token_here' \
+sudo env PATH='/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin' \
+         FACTER_cloudflare_token='your_real_api_token_here' \
          FACTER_ddclient_replace_config=true \
          openvox apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
 ```

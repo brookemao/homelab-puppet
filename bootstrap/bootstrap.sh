@@ -25,15 +25,18 @@ err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Verify sudo access when running as non-root
+# Configure sudo with explicit PATH to resolve system binaries
+SYS_PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin"
 SUDO=""
 if [[ $EUID -ne 0 ]]; then
     if command -v sudo &>/dev/null; then
-        SUDO="sudo"
+        SUDO="sudo env PATH=${SYS_PATH}"
     else
         err "Root privileges required, but sudo is not installed."
         exit 1
     fi
+else
+    SUDO="env PATH=${SYS_PATH}"
 fi
 
 echo "============================================================"
@@ -46,8 +49,8 @@ echo ""
 # ------------------------------------------------------------------
 info "Step 1/3: Checking OpenVox installation..."
 
-if $SUDO openvox --version &>/dev/null || command -v openvox &>/dev/null; then
-    ok "OpenVox is already installed: $($SUDO openvox --version 2>/dev/null || openvox --version)"
+if $SUDO openvox --version &>/dev/null; then
+    ok "OpenVox is already installed: $($SUDO openvox --version 2>/dev/null)"
 else
     info "OpenVox not found. Installing openvox-agent via DNF with sudo..."
 
@@ -76,8 +79,8 @@ else
     info "Installing openvox-agent package with sudo..."
     $SUDO dnf install -y openvox-agent
 
-    if $SUDO openvox --version &>/dev/null || command -v openvox &>/dev/null; then
-        ok "OpenVox installed successfully: $($SUDO openvox --version 2>/dev/null || openvox --version)"
+    if $SUDO openvox --version &>/dev/null; then
+        ok "OpenVox installed successfully: $($SUDO openvox --version 2>/dev/null)"
     else
         err "Failed to verify OpenVox installation."
         exit 1
@@ -148,7 +151,7 @@ fi
 ENV_VARS+=("FACTER_ddclient_replace_config=true")
 
 # Run apply directly with sudo
-$SUDO env "${ENV_VARS[@]}" \
+$SUDO "${ENV_VARS[@]}" \
     openvox apply \
     --modulepath "${PROJECT_ROOT}/modules" \
     --hiera_config "${PROJECT_ROOT}/hiera.yaml" \
