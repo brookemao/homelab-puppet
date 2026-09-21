@@ -16,7 +16,7 @@ class homelab::ddclient (
   Enum['tarball', 'package'] $install_method    = 'tarball',
   String[1]                  $release_tag       = 'latest',
   Boolean                    $manage_service    = true,
-  String[1]                  $service_ensure    = 'stopped',
+  String[1]                  $service_ensure    = 'running',
   Boolean                    $service_enable    = true,
   String[1]                  $cloudflare_token   = '<SECRET TOKEN HERE>',
   String[1]                  $cloudflare_zone    = 'brookemao.ca',
@@ -35,9 +35,9 @@ class homelab::ddclient (
 
   file { '/var/cache/ddclient':
     ensure => directory,
-    owner  => 'root',
-    group  => 'root',
-    mode   => '0700',
+    owner  => 'ddclient',
+    group  => 'ddclient',
+    mode   => '0755',
   }
 
   file { '/usr/local/src':
