@@ -2,9 +2,9 @@
 #
 # bootstrap.sh - Bootstrap OpenVox (masterless) and run homelab baseline configuration
 #
-# 1. Installs OpenVox Agent (`openvox-agent`) via DNF from Vox Pupuli repositories
+# 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
 # 2. Prompts for required secrets (Cloudflare API Key for ddclient)
-# 3. Executes masterless run (`openvox apply`)
+# 3. Executes masterless run with sudo (`sudo openvox apply`)
 #
 
 set -euo pipefail
@@ -25,17 +25,16 @@ err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Helper to run commands as root if needed
-run_root() {
-    if [[ $EUID -eq 0 ]]; then
-        "$@"
-    elif command -v sudo &>/dev/null; then
-        sudo "$@"
+# Verify sudo access when running as non-root
+SUDO=""
+if [[ $EUID -ne 0 ]]; then
+    if command -v sudo &>/dev/null; then
+        SUDO="sudo"
     else
         err "Root privileges required, but sudo is not installed."
         exit 1
     fi
-}
+fi
 
 echo "============================================================"
 echo "      Homelab OpenVox Bootstrap - RHEL 10 Setup             "
@@ -43,14 +42,14 @@ echo "============================================================"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 1: Install OpenVox Agent via DNF
+# Step 1: Install OpenVox Agent via DNF with sudo
 # ------------------------------------------------------------------
 info "Step 1/3: Checking OpenVox installation..."
 
-if command -v openvox &>/dev/null; then
-    ok "OpenVox is already installed: $(openvox --version)"
+if $SUDO openvox --version &>/dev/null || command -v openvox &>/dev/null; then
+    ok "OpenVox is already installed: $($SUDO openvox --version 2>/dev/null || openvox --version)"
 else
-    info "OpenVox not found. Installing openvox-agent via DNF..."
+    info "OpenVox not found. Installing openvox-agent via DNF with sudo..."
 
     # Detect Enterprise Linux major version (defaulting to 10)
     EL_VER="$(rpm -E '%{rhel}' 2>/dev/null || true)"
@@ -67,18 +66,18 @@ else
     # Install the OpenVox release repository package from Vox Pupuli (https://voxpupuli.org/openvox/install/)
     REPO_URL="https://yum.voxpupuli.org/openvox8-release-el-${EL_VER}.noarch.rpm"
 
-    info "Adding OpenVox repository from ${REPO_URL}..."
-    if ! run_root dnf install -y "${REPO_URL}"; then
+    info "Adding OpenVox repository from ${REPO_URL} with sudo..."
+    if ! $SUDO dnf install -y "${REPO_URL}"; then
         err "Failed to install OpenVox release RPM from ${REPO_URL}."
         exit 1
     fi
 
-    # Install openvox-agent
-    info "Installing openvox-agent package..."
-    run_root dnf install -y openvox-agent
+    # Install openvox-agent with sudo
+    info "Installing openvox-agent package with sudo..."
+    $SUDO dnf install -y openvox-agent
 
-    if command -v openvox &>/dev/null; then
-        ok "OpenVox installed successfully: $(openvox --version)"
+    if $SUDO openvox --version &>/dev/null || command -v openvox &>/dev/null; then
+        ok "OpenVox installed successfully: $($SUDO openvox --version 2>/dev/null || openvox --version)"
     else
         err "Failed to verify OpenVox installation."
         exit 1
@@ -134,9 +133,9 @@ fi
 echo ""
 
 # ------------------------------------------------------------------
-# Step 3: Run OpenVox (Masterless Apply)
+# Step 3: Run OpenVox with sudo (Masterless Apply)
 # ------------------------------------------------------------------
-info "Step 3/3: Executing OpenVox masterless run..."
+info "Step 3/3: Executing OpenVox masterless run with sudo..."
 
 info "Project Root: ${PROJECT_ROOT}"
 
@@ -148,8 +147,8 @@ if [[ -n "${CF_KEY}" ]]; then
 fi
 ENV_VARS+=("FACTER_ddclient_replace_config=true")
 
-# Run apply directly via shell resolution
-run_root env "${ENV_VARS[@]}" \
+# Run apply directly with sudo
+$SUDO env "${ENV_VARS[@]}" \
     openvox apply \
     --modulepath "${PROJECT_ROOT}/modules" \
     --hiera_config "${PROJECT_ROOT}/hiera.yaml" \
