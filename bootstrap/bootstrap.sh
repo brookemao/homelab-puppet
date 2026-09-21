@@ -21,7 +21,7 @@ ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
-# Ensure OpenVox and system binary directories are in PATH
+# Ensure standard binary directories are in PATH
 export PATH="/usr/local/bin:/opt/openvox/bin:/opt/puppetlabs/bin:${PATH}"
 
 # Determine project directory (one level up from this script)
@@ -40,47 +40,6 @@ run_root() {
     fi
 }
 
-# Resolve OpenVox binary path and verify it supports the apply subcommand
-find_openvox_bin() {
-    # 1. Check if an existing openvox binary in PATH actually works
-    if command -v openvox &>/dev/null; then
-        local candidate
-        candidate="$(command -v openvox)"
-        if "$candidate" --help 2>&1 | grep -q "apply"; then
-            echo "$candidate"
-            return 0
-        fi
-    fi
-
-    # 2. Check standard locations provided by the openvox-agent package
-    local candidates=(
-        "/opt/openvox/bin/openvox"
-        "/opt/puppetlabs/bin/openvox"
-        "/opt/puppetlabs/bin/puppet"
-        "/usr/bin/openvox"
-        "/usr/bin/puppet"
-    )
-
-    for c in "${candidates[@]}"; do
-        if [[ -x "$c" ]] && "$c" --help 2>&1 | grep -q "apply"; then
-            echo "$c"
-            return 0
-        fi
-    done
-
-    # 3. Query rpm database directly if installed
-    if command -v rpm &>/dev/null; then
-        local rpm_bin
-        rpm_bin="$(rpm -ql openvox-agent 2>/dev/null | grep -E '/bin/(openvox|puppet)$' | head -n 1 || true)"
-        if [[ -n "$rpm_bin" && -x "$rpm_bin" ]] && "$rpm_bin" --help 2>&1 | grep -q "apply"; then
-            echo "$rpm_bin"
-            return 0
-        fi
-    fi
-
-    echo "openvox"
-}
-
 echo "============================================================"
 echo "      Homelab OpenVox Bootstrap - RHEL 10 Setup             "
 echo "============================================================"
@@ -91,17 +50,15 @@ echo ""
 # ------------------------------------------------------------------
 info "Step 1/3: Checking OpenVox installation..."
 
-OPENVOX_BIN="$(find_openvox_bin)"
+# Ensure /usr/local/bin/openvox links to agent binary if needed
+if command -v puppet &>/dev/null && [[ ! -x /opt/openvox/bin/openvox ]]; then
+    run_root ln -sf /opt/puppetlabs/bin/puppet /usr/local/bin/openvox 2>/dev/null || true
+fi
 
-# Verify whether the found binary is valid
-if [[ -x "$OPENVOX_BIN" ]] && "$OPENVOX_BIN" --help 2>&1 | grep -q "apply"; then
-    ok "OpenVox is already installed: $($OPENVOX_BIN --version)"
-    # Repair /usr/local/bin/openvox symlink if it points to an invalid binary
-    if [[ "$OPENVOX_BIN" != "/usr/local/bin/openvox" ]]; then
-        run_root ln -sf "$OPENVOX_BIN" /usr/local/bin/openvox || true
-    fi
+if command -v openvox &>/dev/null; then
+    ok "OpenVox is already installed: $(openvox --version)"
 else
-    info "Valid OpenVox binary not found. Installing openvox-agent via DNF..."
+    info "OpenVox not found. Installing openvox-agent via DNF..."
 
     # Detect Enterprise Linux major version (defaulting to 10)
     EL_VER="$(rpm -E '%{rhel}' 2>/dev/null || true)"
@@ -128,20 +85,15 @@ else
     info "Installing openvox-agent package..."
     run_root dnf install -y openvox-agent
 
-    # Refresh PATH for newly installed directories
-    export PATH="/usr/local/bin:/opt/openvox/bin:/opt/puppetlabs/bin:${PATH}"
-
-    OPENVOX_BIN="$(find_openvox_bin)"
-
-    # Create / update /usr/local/bin/openvox symlink to point to the real engine
-    if [[ -x "$OPENVOX_BIN" && "$OPENVOX_BIN" != "/usr/local/bin/openvox" ]]; then
-        run_root ln -sf "$OPENVOX_BIN" /usr/local/bin/openvox || true
+    # Ensure openvox command is available
+    if command -v puppet &>/dev/null && ! command -v openvox &>/dev/null; then
+        run_root ln -sf /opt/puppetlabs/bin/puppet /usr/local/bin/openvox 2>/dev/null || true
     fi
 
-    if [[ -x "$OPENVOX_BIN" ]] && "$OPENVOX_BIN" --help 2>&1 | grep -q "apply"; then
-        ok "OpenVox installed successfully: $($OPENVOX_BIN --version)"
+    if command -v openvox &>/dev/null; then
+        ok "OpenVox installed successfully: $(openvox --version)"
     else
-        err "Failed to verify OpenVox installation via DNF."
+        err "Failed to verify OpenVox installation."
         exit 1
     fi
 fi
@@ -203,20 +155,18 @@ info "Project Root: ${PROJECT_ROOT}"
 
 cd "${PROJECT_ROOT}"
 
-OPENVOX_BIN="$(find_openvox_bin)"
-
 ENV_VARS=()
 if [[ -n "${CF_KEY}" ]]; then
     ENV_VARS+=("FACTER_cloudflare_token=${CF_KEY}")
 fi
 ENV_VARS+=(
     "FACTER_ddclient_replace_config=true"
-    "PATH=/usr/local/bin:/opt/openvox/bin:/opt/puppetlabs/bin:${PATH}"
+    "PATH=${PATH}"
 )
 
-# Run apply with any additional arguments passed to bootstrap.sh (e.g. --noop)
+# Run apply directly via shell resolution
 run_root env "${ENV_VARS[@]}" \
-    "${OPENVOX_BIN}" apply \
+    openvox apply \
     --modulepath "${PROJECT_ROOT}/modules" \
     --hiera_config "${PROJECT_ROOT}/hiera.yaml" \
     "$@" \
