@@ -21,9 +21,6 @@ ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
-# Ensure standard binary directories are in PATH
-export PATH="/usr/local/bin:/opt/openvox/bin:${PATH}"
-
 # Determine project directory (one level up from this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -39,11 +36,6 @@ run_root() {
         exit 1
     fi
 }
-
-# Clean up any broken symlink pointing to curl from previous run
-if [[ -L /usr/local/bin/openvox ]] && /usr/local/bin/openvox --version 2>&1 | grep -iq "curl"; then
-    run_root rm -f /usr/local/bin/openvox
-fi
 
 echo "============================================================"
 echo "      Homelab OpenVox Bootstrap - RHEL 10 Setup             "
@@ -154,10 +146,7 @@ ENV_VARS=()
 if [[ -n "${CF_KEY}" ]]; then
     ENV_VARS+=("FACTER_cloudflare_token=${CF_KEY}")
 fi
-ENV_VARS+=(
-    "FACTER_ddclient_replace_config=true"
-    "PATH=${PATH}"
-)
+ENV_VARS+=("FACTER_ddclient_replace_config=true")
 
 # Run apply directly via shell resolution
 run_root env "${ENV_VARS[@]}" \
