@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# bootstrap.sh - Bootstrap Puppet Bolt and run homelab baseline configuration
+# bootstrap.sh - Bootstrap OpenVox (masterless) and run homelab baseline configuration
 #
-# 1. Installs Puppet Bolt via DNF
+# 1. Installs OpenVox Agent (`openvox-agent`) via DNF from Vox Pupuli repositories
 # 2. Prompts for required secrets (Cloudflare API Key for ddclient)
-# 3. Executes the Puppet Bolt plan
+# 3. Executes masterless run (`puppet apply`)
 #
 
 set -euo pipefail
@@ -20,6 +20,9 @@ info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
 ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+
+# Ensure puppet/openvox binary directories are in PATH
+export PATH="/opt/puppetlabs/bin:/opt/openvox/bin:${PATH}"
 
 # Determine project directory (one level up from this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,19 +41,21 @@ run_root() {
 }
 
 echo "============================================================"
-echo "      Homelab Puppet Bolt Bootstrap - RHEL 10 Setup         "
+echo "      Homelab OpenVox Bootstrap - RHEL 10 Setup             "
 echo "============================================================"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 1: Install Puppet Bolt via DNF
+# Step 1: Install OpenVox Agent via DNF
 # ------------------------------------------------------------------
-info "Step 1/3: Checking Puppet Bolt installation..."
+info "Step 1/3: Checking OpenVox installation..."
 
-if command -v bolt &>/dev/null; then
-    ok "Puppet Bolt is already installed: $(bolt --version)"
+PUPPET_BIN="$(command -v puppet || command -v openvox || echo "/opt/puppetlabs/bin/puppet")"
+
+if command -v "$PUPPET_BIN" &>/dev/null || [[ -x "$PUPPET_BIN" ]]; then
+    ok "OpenVox / Puppet is already installed: $($PUPPET_BIN --version)"
 else
-    info "Puppet Bolt not found. Installing via DNF..."
+    info "OpenVox not found. Installing openvox-agent via DNF..."
 
     # Detect Enterprise Linux major version (defaulting to 10)
     EL_VER="$(rpm -E '%{rhel}' 2>/dev/null || true)"
@@ -64,24 +69,32 @@ else
 
     info "Detected Enterprise Linux version: ${EL_VER}"
 
-    # Install the Puppet release repository package
-    REPO_URL="https://yum.puppet.com/puppet-tools-release-el-${EL_VER}.noarch.rpm"
-    REPO_FALLBACK_URL="https://yum.puppet.com/puppet8-release-el-${EL_VER}.noarch.rpm"
+    # Install the OpenVox release repository package from Vox Pupuli (https://voxpupuli.org/openvox/install/)
+    REPO_URL="https://yum.voxpupuli.org/openvox8-release-el-${EL_VER}.noarch.rpm"
 
-    info "Adding Puppet repository from ${REPO_URL}..."
+    info "Adding OpenVox repository from ${REPO_URL}..."
     if ! run_root dnf install -y "${REPO_URL}"; then
-        warn "Could not install primary repo RPM. Trying fallback repo: ${REPO_FALLBACK_URL}"
-        run_root dnf install -y "${REPO_FALLBACK_URL}" || true
+        err "Failed to install OpenVox release RPM from ${REPO_URL}."
+        exit 1
     fi
 
-    # Install puppet-bolt
-    info "Installing puppet-bolt package..."
-    run_root dnf install -y puppet-bolt
+    # Install openvox-agent
+    info "Installing openvox-agent package..."
+    run_root dnf install -y openvox-agent
 
-    if command -v bolt &>/dev/null; then
-        ok "Puppet Bolt installed successfully: $(bolt --version)"
+    # Ensure /opt/puppetlabs/bin and /opt/openvox/bin are accessible
+    export PATH="/opt/puppetlabs/bin:/opt/openvox/bin:${PATH}"
+
+    # Create convenient symlink in /usr/local/bin if not present
+    if [[ -x /opt/puppetlabs/bin/puppet ]] && [[ ! -e /usr/local/bin/puppet ]]; then
+        run_root ln -sf /opt/puppetlabs/bin/puppet /usr/local/bin/puppet || true
+    fi
+
+    PUPPET_BIN="$(command -v puppet || command -v openvox || echo "/opt/puppetlabs/bin/puppet")"
+    if [[ -x "$PUPPET_BIN" ]] || command -v "$PUPPET_BIN" &>/dev/null; then
+        ok "OpenVox installed successfully: $($PUPPET_BIN --version)"
     else
-        err "Failed to install Puppet Bolt via DNF."
+        err "Failed to verify OpenVox installation via DNF."
         exit 1
     fi
 fi
@@ -100,6 +113,9 @@ if [[ -n "${CLOUDFLARE_API_KEY:-}" ]]; then
 elif [[ -n "${CLOUDFLARE_TOKEN:-}" ]]; then
     CF_KEY="${CLOUDFLARE_TOKEN}"
     ok "Using Cloudflare API key from environment variable CLOUDFLARE_TOKEN."
+elif [[ -f "${PROJECT_ROOT}/data/secrets.yaml" ]]; then
+    ok "Found existing ${PROJECT_ROOT}/data/secrets.yaml. Skipping prompt."
+    CF_KEY=""
 else
     echo ""
     echo "------------------------------------------------------------"
@@ -118,27 +134,46 @@ else
         echo ""
     done
     ok "Cloudflare API Key captured."
+
+    # Write to data/secrets.yaml for subsequent standalone runs
+    mkdir -p "${PROJECT_ROOT}/data"
+    cat > "${PROJECT_ROOT}/data/secrets.yaml" <<EOF
+---
+homelab::cloudflare_token: '${CF_KEY}'
+EOF
+    chmod 600 "${PROJECT_ROOT}/data/secrets.yaml"
+    ok "Saved secret to ${PROJECT_ROOT}/data/secrets.yaml (mode 0600)."
 fi
 
 echo ""
 
 # ------------------------------------------------------------------
-# Step 3: Run Puppet Bolt
+# Step 3: Run OpenVox (Masterless Apply)
 # ------------------------------------------------------------------
-info "Step 3/3: Running Puppet Bolt plan..."
-
-# Allow passing custom targets as first argument, defaults to 'localhost'
-TARGETS="${1:-localhost}"
+info "Step 3/3: Executing OpenVox masterless run..."
 
 info "Project Root: ${PROJECT_ROOT}"
-info "Target Host:  ${TARGETS}"
 
 cd "${PROJECT_ROOT}"
 
-# Execute the bolt plan with the gathered secret
-run_root bolt plan run homelab \
-    targets="${TARGETS}" \
-    cloudflare_token="${CF_KEY}" \
-    ddclient_replace_config=true
+PUPPET_BIN="$(command -v puppet || command -v openvox || echo "/opt/puppetlabs/bin/puppet")"
 
-ok "Puppet Bolt run completed successfully!"
+ENV_VARS=()
+if [[ -n "${CF_KEY}" ]]; then
+    ENV_VARS+=("FACTER_cloudflare_token=${CF_KEY}")
+fi
+ENV_VARS+=(
+    "FACTER_ddclient_replace_config=true"
+    "PATH=/opt/puppetlabs/bin:/opt/openvox/bin:${PATH}"
+)
+
+# Run puppet apply with any additional arguments passed to bootstrap.sh (e.g. --noop)
+run_root env "${ENV_VARS[@]}" \
+    "${PUPPET_BIN}" apply \
+    --modulepath="${PROJECT_ROOT}/modules" \
+    --hiera_config="${PROJECT_ROOT}/hiera.yaml" \
+    "$@" \
+    "${PROJECT_ROOT}/manifests/site.pp"
+
+ok "OpenVox configuration run completed successfully!"
+

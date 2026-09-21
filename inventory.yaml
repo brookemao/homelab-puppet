@@ -1,9 +1,0 @@
-# Puppet Bolt inventory configuration (Version 2)
-# Configured for local execution directly on the target machine being modified.
-version: 2
-
-targets:
-  - uri: localhost
-    name: localhost
-    config:
-      transport: local

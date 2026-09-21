@@ -1,7 +1,9 @@
-# Bolt runtime and cache directories
-.bolt/
-.rerun.json
-Puppetfile.lock
+# Secrets
+data/secrets.yaml
+
+# Puppet cache and runtime directories
+.resource_types/
+.modules/
 log/
 
 # OS specific files

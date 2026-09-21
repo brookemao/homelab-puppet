@@ -1,8 +1,0 @@
-# Bolt project configuration
-name: homelab
-
-# Project configuration and defaults
-description: "Homelab Puppet Bolt automation for RHEL 10 baseline setup"
-
-# Target connection configuration
-transport: ssh

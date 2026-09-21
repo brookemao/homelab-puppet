@@ -1,12 +1,15 @@
-# Homelab Puppet Bolt Configuration for RHEL 10
+# Homelab OpenVox (Masterless) Configuration for RHEL 10
 
-Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux 10 / AlmaLinux 10 / CentOS Stream 10) system with:
+Standalone masterless [OpenVox](https://voxpupuli.org/openvox/) automation (`puppet apply`) to configure a baseline RHEL 10 (or Rocky Linux 10 / AlmaLinux 10 / CentOS Stream 10) system.
 
+[OpenVox](https://voxpupuli.org/openvox/) is the fully open source, community-governed alternative and direct drop-in replacement for Puppet maintained by [Vox Pupuli](https://voxpupuli.org/). It runs existing Puppet manifests and modules natively while being 100% open source.
+
+### Managed Components:
 - **EPEL 10 Repository**: Enables CodeReady Builder (CRB) and installs the EPEL 10 release package with automated metadata cache refresh.
 - **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration.
-- **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub repository](https://github.com/ddclient/ddclient) (with GNU autotools, SSL & JSON dependencies, and systemd service integration) or via native DNF package.
+- **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
 
 ---
 
@@ -14,12 +17,15 @@ Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux
 
 ```text
 .
-├── bolt-project.yaml           # Bolt project declaration
-├── inventory.yaml              # Target hosts and local transport configuration
+├── bootstrap/
+│   └── bootstrap.sh            # Automated bootstrap script (installs OpenVox, prompts secrets, runs apply)
+├── data/
+│   ├── common.yaml             # Hiera common configuration parameters
+│   └── secrets.yaml.example    # Template for private credentials (copied to secrets.yaml)
+├── environment.conf            # Environment modulepath definition
+├── hiera.yaml                  # Hiera 5 hierarchy configuration
 ├── manifests/
-│   └── site.pp                 # Standalone manifest entrypoint for `bolt apply`
-├── plans/
-│   └── init.pp                 # Bolt plan entrypoint (`bolt plan run homelab`)
+│   └── site.pp                 # Masterless manifest entrypoint for `puppet apply`
 ├── modules/
 │   └── homelab/
 │       ├── manifests/
@@ -28,9 +34,9 @@ Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux
 │       │   ├── git.pp          # Git package installation
 │       │   ├── fastfetch.pp    # Fastfetch installation
 │       │   ├── fail2ban.pp     # Fail2ban + firewalld packages & service
-│       │   └── ddclient.pp     # GitHub source build or package install & systemd service
+│       │   └── ddclient.pp     # GitHub release tarball build & systemd service
 │       └── templates/
-│           ├── ddclient.conf.epp   # ddclient configuration template (Cloudflare, DuckDNS, etc.)
+│           ├── ddclient.conf.epp   # ddclient configuration template (Cloudflare snippet)
 │           └── jail.local.epp      # fail2ban jail configuration template
 └── README.md
 ```
@@ -39,18 +45,26 @@ Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux
 
 ## Quick Start
 
-This project is configured for **local execution** directly on the RHEL 10 machine you want to modify. It uses Puppet Bolt's native `transport: local`, so no SSH keys, SSH daemon, or network credentials are required.
+### 1. Automated Bootstrap Script (Recommended)
 
-### 1. Run the Automated Bootstrap Script
-
-The easiest way to set up the system is using `bootstrap/bootstrap.sh`. It automatically installs Puppet Bolt via DNF, prompts you securely for your Cloudflare API key, and executes the Bolt plan with root privileges:
+The easiest way to bootstrap and configure a fresh RHEL 10 machine is using `bootstrap/bootstrap.sh`. It automatically:
+1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-el-10.noarch.rpm`) and `openvox-agent` (`puppet apply`) via DNF.
+2. Securely prompts for your Cloudflare API key / token (or reads from `CLOUDFLARE_API_KEY`).
+3. Saves the token to `data/secrets.yaml` (mode `0600`, gitignored).
+4. Executes masterless `puppet apply` with root privileges.
 
 ```bash
 chmod +x bootstrap/bootstrap.sh
 ./bootstrap/bootstrap.sh
 ```
 
-You can also pass your Cloudflare token via environment variable to skip the interactive prompt:
+You can pass standard flags (such as `--noop` for a dry run):
+
+```bash
+./bootstrap/bootstrap.sh --noop
+```
+
+Or provide your Cloudflare token via environment variable to run non-interactively:
 
 ```bash
 CLOUDFLARE_API_KEY='your_api_token' ./bootstrap/bootstrap.sh
@@ -58,73 +72,61 @@ CLOUDFLARE_API_KEY='your_api_token' ./bootstrap/bootstrap.sh
 
 ---
 
-### 2. Alternative: Running Bolt Directly
+### 2. Standalone Execution
 
-If Puppet Bolt is already installed, you can execute the plan directly on the local machine (requires root or sudo for package and service management):
+If OpenVox (`openvox-agent`) is already installed on the system, you can run `puppet apply` directly:
 
 ```bash
-sudo bolt plan run homelab
+sudo puppet apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
 ```
 
-Or pass parameters directly on the CLI:
+You can supply or override the Cloudflare token and settings using environment variables:
 
 ```bash
-sudo bolt plan run homelab \
-  cloudflare_token='your_real_api_token_here' \
-  ddclient_replace_config=true
-```
-
-Or using standalone `bolt apply`:
-
-```bash
-sudo bolt apply manifests/site.pp --targets localhost
+sudo env FACTER_cloudflare_token='your_real_api_token_here' \
+         FACTER_ddclient_replace_config=true \
+         puppet apply --modulepath=modules --hiera_config=hiera.yaml manifests/site.pp
 ```
 
 ---
 
-### 3. Target Inventory
+## Configuration via Hiera
 
-The default `inventory.yaml` targets `localhost` using `transport: local`:
+This project uses standard Hiera 5 data lookups.
 
-```yaml
-version: 2
+- **`data/common.yaml`**: Contains default parameters for the system:
+  ```yaml
+  homelab::manage_services: true
+  homelab::ddclient_install_method: 'tarball'
+  homelab::ddclient_release_tag: 'latest'
+  homelab::cloudflare_zone: 'brookemao.ca'
+  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca'
+  homelab::ddclient_replace_config: false
+  ```
 
-targets:
-  - uri: localhost
-    name: localhost
-    config:
-      transport: local
-```
-
-*(Note: If you ever wish to target a remote machine over SSH instead, you can change `transport: ssh` and configure SSH credentials in `inventory.yaml`).*
+- **`data/secrets.yaml`** *(gitignored)*: Holds private tokens and keys:
+  ```yaml
+  homelab::cloudflare_token: 'your_real_token_here'
+  ```
+  Create it from the example:
+  ```bash
+  cp data/secrets.yaml.example data/secrets.yaml
+  chmod 600 data/secrets.yaml
+  ```
 
 ---
 
-## Plan Parameters
-
-You can override default plan settings directly on the command line:
+## Parameters
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `targets` | `TargetSpec` | `'localhost'` | Target hosts or group (defaults to local machine) |
-| `manage_services` | `Boolean` | `true` | Whether to manage and enable background services |
+| `manage_services` | `Boolean` | `true` | Whether to manage and enable background services (`fail2ban`, `ddclient`) |
 | `ddclient_install_method` | `String` | `'tarball'` | `'tarball'` (official GitHub release tarball) or `'package'` (dnf) |
-| `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag) or specific tag (e.g. `'v4.0.0'`) |
+| `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag past 4.0.0) or specific tag (e.g. `'v4.0.0'`) |
 | `cloudflare_token` | `String` | `'<SECRET TOKEN HERE>'` | Cloudflare API Token for dynamic DNS updates |
 | `cloudflare_zone` | `String` | `'brookemao.ca'` | Cloudflare root domain zone |
 | `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca'` | Subdomains to update |
 | `ddclient_replace_config` | `Boolean` | `false` | Whether to overwrite existing `/etc/ddclient/ddclient.conf` |
-
-### Example: Running with Cloudflare Token
-
-```bash
-sudo bolt plan run homelab \
-  targets=localhost \
-  cloudflare_token='your_real_api_token_here' \
-  ddclient_replace_config=true
-```
-
-Or run with defaults, and manually update `/etc/ddclient/ddclient.conf` on the target host.
 
 ---
 
@@ -142,7 +144,7 @@ password=<SECRET TOKEN HERE> \
 homelab.brookemao.ca,mindustry.brookemao.ca
 ```
 
-1. If you did not pass `cloudflare_token` during `bolt plan run`, update the token in `/etc/ddclient/ddclient.conf`:
+1. If you ran without supplying a token, update the secret in `/etc/ddclient/ddclient.conf`:
    ```bash
    sudo nano /etc/ddclient/ddclient.conf
    ```
@@ -151,4 +153,4 @@ homelab.brookemao.ca,mindustry.brookemao.ca
    sudo systemctl start ddclient
    sudo systemctl status ddclient
    ```
-*(Note: `replace => false` by default ensures your API credentials will never be overwritten on subsequent Bolt runs unless `ddclient_replace_config=true` is explicitly provided).*
+*(Note: `replace => false` by default ensures your API credentials will never be overwritten on subsequent runs unless `ddclient_replace_config=true` is explicitly provided).*
