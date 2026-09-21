@@ -22,7 +22,7 @@ warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
 # Ensure standard binary directories are in PATH
-export PATH="/usr/local/bin:/opt/openvox/bin:/opt/puppetlabs/bin:${PATH}"
+export PATH="/usr/local/bin:/opt/openvox/bin:${PATH}"
 
 # Determine project directory (one level up from this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,6 +40,11 @@ run_root() {
     fi
 }
 
+# Clean up any broken symlink pointing to curl from previous run
+if [[ -L /usr/local/bin/openvox ]] && /usr/local/bin/openvox --version 2>&1 | grep -iq "curl"; then
+    run_root rm -f /usr/local/bin/openvox
+fi
+
 echo "============================================================"
 echo "      Homelab OpenVox Bootstrap - RHEL 10 Setup             "
 echo "============================================================"
@@ -49,11 +54,6 @@ echo ""
 # Step 1: Install OpenVox Agent via DNF
 # ------------------------------------------------------------------
 info "Step 1/3: Checking OpenVox installation..."
-
-# Ensure /usr/local/bin/openvox links to agent binary if needed
-if command -v puppet &>/dev/null && [[ ! -x /opt/openvox/bin/openvox ]]; then
-    run_root ln -sf /opt/puppetlabs/bin/puppet /usr/local/bin/openvox 2>/dev/null || true
-fi
 
 if command -v openvox &>/dev/null; then
     ok "OpenVox is already installed: $(openvox --version)"
@@ -84,11 +84,6 @@ else
     # Install openvox-agent
     info "Installing openvox-agent package..."
     run_root dnf install -y openvox-agent
-
-    # Ensure openvox command is available
-    if command -v puppet &>/dev/null && ! command -v openvox &>/dev/null; then
-        run_root ln -sf /opt/puppetlabs/bin/puppet /usr/local/bin/openvox 2>/dev/null || true
-    fi
 
     if command -v openvox &>/dev/null; then
         ok "OpenVox installed successfully: $(openvox --version)"
