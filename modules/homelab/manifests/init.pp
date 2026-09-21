@@ -1,6 +1,6 @@
 # @summary Homelab baseline configuration for RHEL 10
 #
-# Sets up the EPEL repository, fastfetch, fail2ban, and ddclient
+# Sets up the EPEL repository, git, fastfetch, fail2ban, and ddclient
 #
 # @param manage_services Whether to manage and start background services
 # @param ddclient_install_method 'tarball' (from GitHub release tarball) or 'package' (via dnf)
@@ -21,18 +21,21 @@ class homelab (
   # 1. Enable CRB & Install EPEL 10 repository
   class { 'homelab::epel': }
 
-  # 2. Install fastfetch from EPEL
+  # 2. Install git package
+  class { 'homelab::git': }
+
+  # 3. Install fastfetch from EPEL
   class { 'homelab::fastfetch':
     require => Class['homelab::epel'],
   }
 
-  # 3. Install and configure fail2ban with firewalld integration
+  # 4. Install and configure fail2ban with firewalld integration
   class { 'homelab::fail2ban':
     manage_service => $manage_services,
     require        => Class['homelab::epel'],
   }
 
-  # 4. Install and configure ddclient from GitHub release tarball or package
+  # 5. Install and configure ddclient from GitHub release tarball or package
   class { 'homelab::ddclient':
     install_method     => $ddclient_install_method,
     release_tag        => $ddclient_release_tag,

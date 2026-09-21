@@ -3,6 +3,7 @@
 Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux 10 / AlmaLinux 10 / CentOS Stream 10) system with:
 
 - **EPEL 10 Repository**: Enables CodeReady Builder (CRB) and installs the EPEL 10 release package with automated metadata cache refresh.
+- **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration.
 - **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub repository](https://github.com/ddclient/ddclient) (with GNU autotools, SSL & JSON dependencies, and systemd service integration) or via native DNF package.
@@ -14,7 +15,7 @@ Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux
 ```text
 .
 ├── bolt-project.yaml           # Bolt project declaration
-├── inventory.yaml              # Target hosts, SSH credentials, and connection options
+├── inventory.yaml              # Target hosts and local transport configuration
 ├── manifests/
 │   └── site.pp                 # Standalone manifest entrypoint for `bolt apply`
 ├── plans/
@@ -24,6 +25,7 @@ Agentless Puppet Bolt automation to configure a baseline RHEL 10 (or Rocky Linux
 │       ├── manifests/
 │       │   ├── init.pp         # Main class orchestrating baseline setup
 │       │   ├── epel.pp         # CRB repository enablement & EPEL 10 package
+│       │   ├── git.pp          # Git package installation
 │       │   ├── fastfetch.pp    # Fastfetch installation
 │       │   ├── fail2ban.pp     # Fail2ban + firewalld packages & service
 │       │   └── ddclient.pp     # GitHub source build or package install & systemd service

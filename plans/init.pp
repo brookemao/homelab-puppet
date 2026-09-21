@@ -1,4 +1,4 @@
-# @summary Bolt plan to install EPEL 10, fastfetch, fail2ban, and ddclient
+# @summary Bolt plan to install EPEL 10, git, fastfetch, fail2ban, and ddclient
 #
 # Dynamically resolves the latest release tag from GitHub before running puppet apply,
 # ensuring updates past 4.0.0 are automatically discovered and installed.
