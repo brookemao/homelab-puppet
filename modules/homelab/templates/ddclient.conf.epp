@@ -1,0 +1,29 @@
+<%- | String[1] $cloudflare_token   = '<SECRET TOKEN HERE>',
+      String[1] $cloudflare_zone    = 'brookemao.ca',
+      String[1] $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca',
+| -%>
+# /etc/ddclient/ddclient.conf
+# Dynamic DNS Client configuration
+# Note: Ensure this file has 0600 permissions as it contains provider API credentials.
+
+# Global options
+daemon=300
+syslog=yes
+ssl=yes
+pid=/run/ddclient.pid
+
+# Cache directory for current IP address
+# (ddclient checks here before contacting the DDNS provider)
+cache=/var/cache/ddclient/ddclient.cache
+
+# Method used to determine your public IP:
+# Options: web, if (interface), fw, etc.
+use=web, web=checkip.dyndns.org
+
+## Cloudflare
+protocol=cloudflare,        \
+zone=<%= $cloudflare_zone %>,            \
+ttl=1,                      \
+login=token,    \
+password=<%= $cloudflare_token %> \
+<%= $cloudflare_domains %>

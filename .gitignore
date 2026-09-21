@@ -1,0 +1,9 @@
+# Bolt runtime and cache directories
+.bolt/
+.rerun.json
+Puppetfile.lock
+log/
+
+# OS specific files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,31 @@
+<%- | Integer $bantime,
+      Integer $findtime,
+      Integer $maxretry,
+      String  $banaction,
+      String  $backend,
+| -%>
+# /etc/fail2ban/jail.local
+# Managed by Puppet Bolt - manual edits will be overwritten
+
+[DEFAULT]
+# Ban time in seconds
+bantime  = <%= $bantime %>
+
+# Time interval during which maxretry attempts will trigger a ban
+findtime = <%= $findtime %>
+
+# Number of failures before an IP is banned
+maxretry = <%= $maxretry %>
+
+# Use firewalld rich rules on RHEL/EL10
+banaction = <%= $banaction %>
+
+# In RHEL 10, sshd logs to systemd journal
+backend = <%= $backend %>
+
+# Whitelist localhost
+ignoreip = 127.0.0.1/8 ::1
+
+[sshd]
+enabled = true
+port    = ssh

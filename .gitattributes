@@ -1,0 +1,7 @@
+# Enforce LF line endings for shell scripts and puppet files
+*.sh text eol=lf
+*.pp text eol=lf
+*.epp text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf

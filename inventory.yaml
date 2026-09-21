@@ -1,0 +1,29 @@
+# Puppet Bolt inventory configuration (Version 2)
+# Specify your RHEL 10 target hosts, credentials, and connection options.
+version: 2
+
+groups:
+  - name: rhel10
+    targets:
+      # Replace with your target host's IP address or FQDN
+      - uri: 192.168.1.50
+        name: rhel10-node1
+    config:
+      transport: ssh
+      ssh:
+        # Default user to connect as
+        user: root
+
+        # Path to your private key (optional, defaults to standard SSH keys in ~/.ssh)
+        # private-key: ~/.ssh/id_ed25519
+
+        # If using password authentication instead of SSH keys:
+        # password: 'your_password_here'
+
+        # Set to false for homelab environments with dynamic or self-signed host keys
+        host-key-check: false
+
+        # If connecting as a non-root user that requires sudo:
+        # user: admin
+        # run-as: root
+        # sudo-password: 'your_sudo_password_here'
