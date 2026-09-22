@@ -11,6 +11,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration.
+- **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` allowed in the default `public` zone.
 - **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
 
 ---
@@ -36,6 +37,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 │       │   ├── git.pp          # Git package installation
 │       │   ├── fastfetch.pp    # Fastfetch installation
 │       │   ├── fail2ban.pp     # Fail2ban + firewalld packages & service
+│       │   ├── firewall.pp     # Firewalld service & public zone 443/tcp rule (puppet-firewalld)
 │       │   └── ddclient.pp     # GitHub release tarball build & systemd service
 │       └── templates/
 │           ├── ddclient.conf.epp   # ddclient configuration template (Cloudflare snippet)

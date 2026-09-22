@@ -6,6 +6,12 @@ data/secrets.yaml
 .modules/
 log/
 
+# Puppet Forge dependencies installed by bootstrap/bootstrap.sh
+# (puppet-firewalld pulls in stdlib and augeas_core automatically)
+modules/firewalld/
+modules/stdlib/
+modules/augeas_core/
+
 # OS specific files
 .DS_Store
 Thumbs.db

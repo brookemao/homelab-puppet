@@ -47,7 +47,7 @@ echo ""
 # ------------------------------------------------------------------
 # Step 1: Install OpenVox Agent via DNF with sudo
 # ------------------------------------------------------------------
-info "Step 1/3: Checking OpenVox installation..."
+info "Step 1/4: Checking OpenVox installation..."
 
 if $SUDO puppet --version &>/dev/null; then
     ok "OpenVox (puppet) is already installed: $($SUDO puppet --version 2>/dev/null)"
@@ -92,7 +92,7 @@ echo ""
 # ------------------------------------------------------------------
 # Step 2: Prompt for Secrets
 # ------------------------------------------------------------------
-info "Step 2/3: Gathering secrets..."
+info "Step 2/4: Gathering secrets..."
 
 # Check if already supplied via environment variable
 if [[ -n "${CLOUDFLARE_API_KEY:-}" ]]; then
@@ -136,9 +136,23 @@ fi
 echo ""
 
 # ------------------------------------------------------------------
-# Step 3: Run OpenVox with sudo (Masterless Apply)
+# Step 3: Install required Puppet Forge modules (before apply)
 # ------------------------------------------------------------------
-info "Step 3/3: Executing OpenVox masterless run with sudo..."
+info "Step 3/4: Installing required Puppet Forge modules..."
+
+# Install into the project modules dir so `puppet apply --modulepath` resolves them.
+# puppet-firewalld pulls in its dependencies (puppetlabs-stdlib, puppetlabs-augeas_core) automatically.
+if ! $SUDO puppet module install puppet-firewalld --modulepath "${PROJECT_ROOT}/modules"; then
+    warn "Could not install puppet-firewalld (it may already be installed). Continuing..."
+fi
+ok "Puppet Forge modules ready."
+
+echo ""
+
+# ------------------------------------------------------------------
+# Step 4: Run OpenVox with sudo (Masterless Apply)
+# ------------------------------------------------------------------
+info "Step 4/4: Executing OpenVox masterless run with sudo..."
 
 info "Project Root: ${PROJECT_ROOT}"
 

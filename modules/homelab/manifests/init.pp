@@ -29,13 +29,16 @@ class homelab (
     require => Class['homelab::epel'],
   }
 
-  # 4. Install and configure fail2ban with firewalld integration
+  # 4. Manage firewalld and open HTTPS (443/tcp) in the public zone
+  class { 'homelab::firewall': }
+
+  # 5. Install and configure fail2ban with firewalld integration
   class { 'homelab::fail2ban':
     manage_service => $manage_services,
-    require        => Class['homelab::epel'],
+    require        => [Class['homelab::epel'], Class['homelab::firewall']],
   }
 
-  # 5. Install and configure ddclient from GitHub release tarball or package
+  # 6. Install and configure ddclient from GitHub release tarball or package
   class { 'homelab::ddclient':
     install_method     => $ddclient_install_method,
     release_tag        => $ddclient_release_tag,
