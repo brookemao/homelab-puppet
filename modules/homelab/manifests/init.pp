@@ -1,6 +1,6 @@
 # @summary Homelab baseline configuration for RHEL 10
 #
-# Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, and ddclient
+# Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, ddclient, and Immich
 #
 # @param manage_services Whether to manage and start background services
 # @param ddclient_install_method 'tarball' (from GitHub release tarball) or 'package' (via dnf)
@@ -54,4 +54,10 @@ class homelab (
     replace_config     => $ddclient_replace_config,
     require            => Class['homelab::epel'],
   }
+
+  # 8. Deploy Immich. Everything else uses the class defaults; override with immich::* Hiera keys.
+  class { 'immich':
+    manage_service => $manage_services,
+  }
+  Class['homelab::podman'] -> Class['immich']
 }

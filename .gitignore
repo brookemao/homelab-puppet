@@ -8,8 +8,10 @@ log/
 
 # Puppet Forge dependencies installed by bootstrap/bootstrap.sh
 # (puppet-firewalld pulls in stdlib and augeas_core automatically;
-#  southalc-podman pulls in stdlib, concat, selinux_core, inifile, systemd and hashfile automatically)
+#  southalc-podman pulls in stdlib, concat, selinux_core, inifile, systemd and hashfile automatically;
+#  puppet-selinux needs only stdlib)
 modules/firewalld/
+modules/selinux/
 modules/stdlib/
 modules/augeas_core/
 modules/podman/
