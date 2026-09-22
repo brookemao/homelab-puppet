@@ -8,7 +8,10 @@ log/
 
 # Puppet Forge dependencies installed by bootstrap/bootstrap.sh
 # (puppet-firewalld pulls in stdlib and augeas_core automatically;
-#  southalc-podman pulls in stdlib, concat, selinux_core, inifile, systemd and hashfile automatically)
+#  southalc-podman pulls in stdlib, concat, selinux_core, inifile, systemd and hashfile automatically;
+#  puppet-nginx pulls in concat and stdlib automatically;
+#  puppet-fail2ban pulls in stdlib automatically;
+#  puppet-letsencrypt pulls in stdlib, inifile and epel automatically)
 modules/firewalld/
 modules/stdlib/
 modules/augeas_core/
@@ -18,6 +21,10 @@ modules/selinux_core/
 modules/inifile/
 modules/systemd/
 modules/hashfile/
+modules/nginx/
+modules/fail2ban/
+modules/letsencrypt/
+modules/epel/
 
 # OS specific files
 .DS_Store

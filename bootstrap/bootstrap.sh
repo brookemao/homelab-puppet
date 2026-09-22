@@ -109,7 +109,7 @@ else
     echo "------------------------------------------------------------"
     echo " Cloudflare Dynamic DNS Configuration for ddclient          "
     echo " Target zone:    brookemao.ca                               "
-    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca"
+    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca, photos.brookemao.ca"
     echo "------------------------------------------------------------"
     echo -n "Enter Cloudflare API Key / Token (hidden): "
     read -r -s CF_KEY
@@ -144,7 +144,10 @@ info "Step 3/4: Installing required Puppet Forge modules..."
 # puppet-firewalld pulls in its dependencies (puppetlabs-stdlib, puppetlabs-augeas_core) automatically.
 # southalc-podman pulls in its dependencies (puppetlabs-stdlib, puppetlabs-concat,
 # puppetlabs-selinux_core, puppetlabs-inifile, puppet-systemd, southalc-hashfile) automatically.
-for _forge_module in puppet-firewalld southalc-podman; do
+# puppet-nginx pulls in its dependencies (puppetlabs-concat, puppetlabs-stdlib) automatically.
+# puppet-fail2ban pulls in its dependency (puppetlabs-stdlib) automatically.
+# puppet-letsencrypt pulls in its dependencies (puppetlabs-stdlib, puppetlabs-inifile, puppet-epel) automatically.
+for _forge_module in puppet-firewalld southalc-podman puppet-nginx puppet-fail2ban puppet-letsencrypt; do
     if ! $SUDO puppet module install "${_forge_module}" --modulepath "${PROJECT_ROOT}/modules"; then
         warn "Could not install ${_forge_module} (it may already be installed). Continuing..."
     fi

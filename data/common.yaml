@@ -4,5 +4,5 @@ homelab::manage_services: true
 homelab::ddclient_install_method: 'tarball'
 homelab::ddclient_release_tag: 'latest'
 homelab::cloudflare_zone: 'brookemao.ca'
-homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca'
+homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca'
 homelab::ddclient_replace_config: false
