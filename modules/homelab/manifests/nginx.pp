@@ -48,7 +48,10 @@ class homelab::nginx (
       'X-Forwarded-For $proxy_add_x_forwarded_for',
       'X-Forwarded-Proto $scheme',
     ],
-    require          => Class['nginx'],
+    # NOTE: do NOT require Class['nginx'] here. The define notifies
+    # Class['nginx::service'] internally, and that class is contained in
+    # Class['nginx'] -- requiring the outer class closes a dependency cycle.
+    # Ordering with the package/config dirs is already handled by the module.
   }
 
   nginx::resource::server { 'homelab-default':
@@ -61,6 +64,7 @@ class homelab::nginx (
     ssl_key        => $ssl_key,
     ssl_redirect   => true,
     www_root       => $default_www_root,
-    require        => Class['nginx'],
+    # NOTE: do NOT require Class['nginx'] here (see above -- it creates a
+    # dependency cycle via the define's internal notify to nginx::service).
   }
 }
