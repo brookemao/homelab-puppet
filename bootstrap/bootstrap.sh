@@ -142,9 +142,13 @@ info "Step 3/4: Installing required Puppet Forge modules..."
 
 # Install into the project modules dir so `puppet apply --modulepath` resolves them.
 # puppet-firewalld pulls in its dependencies (puppetlabs-stdlib, puppetlabs-augeas_core) automatically.
-if ! $SUDO puppet module install puppet-firewalld --modulepath "${PROJECT_ROOT}/modules"; then
-    warn "Could not install puppet-firewalld (it may already be installed). Continuing..."
-fi
+# southalc-podman pulls in its dependencies (puppetlabs-stdlib, puppetlabs-concat,
+# puppetlabs-selinux_core, puppetlabs-inifile, puppet-systemd, southalc-hashfile) automatically.
+for _forge_module in puppet-firewalld southalc-podman; do
+    if ! $SUDO puppet module install "${_forge_module}" --modulepath "${PROJECT_ROOT}/modules"; then
+        warn "Could not install ${_forge_module} (it may already be installed). Continuing..."
+    fi
+done
 ok "Puppet Forge modules ready."
 
 echo ""

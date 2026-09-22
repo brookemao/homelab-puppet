@@ -12,6 +12,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration.
 - **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` allowed in the default `public` zone.
+- **podman**: Container runtime with `podman-compose` (from EPEL) for compose workloads.
 - **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
 
 ---
@@ -38,6 +39,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 │       │   ├── fastfetch.pp    # Fastfetch installation
 │       │   ├── fail2ban.pp     # Fail2ban + firewalld packages & service
 │       │   ├── firewall.pp     # Firewalld service & public zone 443/tcp rule (puppet-firewalld)
+│       │   ├── podman.pp       # Podman + podman-compose packages (compose from EPEL)
 │       │   └── ddclient.pp     # GitHub release tarball build & systemd service
 │       └── templates/
 │           ├── ddclient.conf.epp   # ddclient configuration template (Cloudflare snippet)

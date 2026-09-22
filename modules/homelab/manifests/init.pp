@@ -1,6 +1,6 @@
 # @summary Homelab baseline configuration for RHEL 10
 #
-# Sets up the EPEL repository, git, fastfetch, fail2ban, and ddclient
+# Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, and ddclient
 #
 # @param manage_services Whether to manage and start background services
 # @param ddclient_install_method 'tarball' (from GitHub release tarball) or 'package' (via dnf)
@@ -38,7 +38,12 @@ class homelab (
     require        => [Class['homelab::epel'], Class['homelab::firewall']],
   }
 
-  # 6. Install and configure ddclient from GitHub release tarball or package
+  # 6. Install podman and podman-compose (compose from EPEL)
+  class { 'homelab::podman':
+    require => Class['homelab::epel'],
+  }
+
+  # 7. Install and configure ddclient from GitHub release tarball or package
   class { 'homelab::ddclient':
     install_method     => $ddclient_install_method,
     release_tag        => $ddclient_release_tag,
