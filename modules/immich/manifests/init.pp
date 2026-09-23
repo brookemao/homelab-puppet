@@ -15,6 +15,9 @@
 # Its own parent must already exist (/home by default). Persistent data goes
 #   in $base_dir/data, and the SELinux rule is recursive over that - so anything placed
 #   beside it stays unreachable by the containers.
+# @param cpu_limit Cores the whole stack may use. Applied to the pod podman-compose puts
+#   the containers in, so it is a collective cap, not a per-container one.
+# @param memory_limit Memory the whole stack may use, e.g. '16g'. Collective, as above.
 # @param manage_selinux Whether to label the data directories for container access
 # @param selinux_type SELinux type the containers need on their bind mounts
 # @param compose_command Absolute path to the compose implementation (systemd ExecStart needs a full path)
@@ -30,6 +33,8 @@ class immich (
   Immich::Absolutepath $base_dir        = '/home/immich',
   String[1]            $user            = 'immich',
   String[1]            $group           = 'immich',
+  Numeric              $cpu_limit       = 4,
+  Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '16g',
   Integer[1]           $uid             = 2283,
   Integer[1]           $gid             = 2283,
   Boolean              $manage_selinux        = true,
@@ -59,7 +64,7 @@ class immich (
     uid        => $uid,
     gid        => $gid,
     system     => true,
-    home       => $install_dir,
+    home       => $base_dir,
     managehome => false,
     shell      => '/usr/sbin/nologin',
     comment    => 'Immich service account',
@@ -135,6 +140,8 @@ class immich (
       'redis_location'  => $redis_location,
       'uid'             => $uid,
       'gid'             => $gid,
+      'cpu_limit'       => $cpu_limit,
+      'memory_limit'    => $memory_limit,
     })),
     require => File[$install_dir],
   }

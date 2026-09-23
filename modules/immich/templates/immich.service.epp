@@ -19,7 +19,6 @@ RemainAfterExit=yes
 WorkingDirectory=<%= $install_dir %>
 ExecStart=<%= $compose_command %> -f <%= $compose_file %> up -d --remove-orphans
 ExecStop=<%= $compose_command %> -f <%= $compose_file %> down
-ExecReload=<%= $compose_command %> -f <%= $compose_file %> up -d --remove-orphans
 # First start pulls several GB of images
 TimeoutStartSec=900
 TimeoutStopSec=120

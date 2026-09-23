@@ -139,6 +139,8 @@ when no key is present, which is why `data/common.yaml` carries none of them.
 | `version` | `String` | `'v3.2.2'` | Immich image tag |
 | `timezone` | `String` | `'America/Los_Angeles'` | `TZ` passed to the containers |
 | `port` | `Integer[1, 65535]` | `2283` | Host port published for the web UI |
+| `cpu_limit` | `Numeric` | `4` | Cores the whole stack may use |
+| `memory_limit` | `String` | `'16g'` | Memory the whole stack may use |
 | `base_dir` | `Immich::Absolutepath` | `'/home/immich'` | Directory the deployment lives under; created if missing, never restyled. Its own parent must already exist |
 | `install_dir` | `Immich::Absolutepath` | `'/opt/immich-app'` | Holds the generated `compose.yml` |
 
@@ -224,6 +226,37 @@ reachable from the host but not through firewalld from the LAN.
   `sudo podman logs immich_postgres` and `sudo ausearch -m avc -ts recent`.
 
 The first start pulls several GB of images; the unit allows 15 minutes for it.
+
+### Resource limits
+
+`cpu_limit` and `memory_limit` cap the stack **collectively**, not per container. All four
+services together get 4 cores and 16 GB.
+
+podman-compose puts every service of a project into a pod (`pod_immich` here), and a pod
+is a cgroup. Limiting the pod limits everything inside it, so the compose file sets the
+limits on `podman pod create` rather than on each service:
+
+```yaml
+x-podman:
+  pod_args:
+    - --infra=false
+    - --share=
+    - --cpus=4
+    - --memory=16g
+```
+
+`pod_args` **replaces** podman-compose's defaults rather than extending them, which is why
+`--infra=false` and `--share=` are repeated - dropping them would change how the stack is
+networked.
+
+Check it took with `podman pod inspect pod_immich`, or read the cgroup directly:
+
+```bash
+cat /sys/fs/cgroup/machine.slice/*libpod_pod*/memory.max
+cat /sys/fs/cgroup/machine.slice/*libpod_pod*/cpu.max
+```
+
+Pod-level limits need cgroups v2, which RHEL 10 uses by default.
 
 ### SELinux
 

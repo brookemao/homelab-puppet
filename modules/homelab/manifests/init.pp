@@ -2,7 +2,8 @@
 #
 # Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, ddclient, and Immich
 #
-# @param manage_services Whether to manage and start background services
+# @param manage_services Whether to manage and start background services (fail2ban,
+#   ddclient, and the immich systemd unit)
 # @param ddclient_install_method 'tarball' (from GitHub release tarball) or 'package' (via dnf)
 # @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0'
 # @param cloudflare_token API token for Cloudflare DDNS

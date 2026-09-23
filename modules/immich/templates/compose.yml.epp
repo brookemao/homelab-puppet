@@ -9,9 +9,22 @@
   String  $redis_location,
   Integer $uid,
   Integer $gid,
+  Numeric $cpu_limit,
+  String  $memory_limit,
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 name: immich
+
+# podman-compose puts every service in a pod (pod_immich), so limiting the pod caps the
+# four containers collectively rather than each one individually.
+# pod_args REPLACES podman-compose's defaults, so --infra=false and --share= are repeated
+# here deliberately - dropping them would change how the stack is networked.
+x-podman:
+  pod_args:
+    - --infra=false
+    - --share=
+    - --cpus=<%= $cpu_limit %>
+    - --memory=<%= $memory_limit %>
 
 services:
   immich-server:
