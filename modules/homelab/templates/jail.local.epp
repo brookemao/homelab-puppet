@@ -3,6 +3,13 @@
       Integer $maxretry,
       String  $banaction,
       String  $backend,
+      Boolean $immich_enabled,
+      Integer $immich_maxretry,
+      Integer $immich_bantime,
+      Integer $immich_findtime,
+      String  $immich_port,
+      Optional[String] $immich_logpath,
+      String  $immich_journalmatch,
 | -%>
 # /etc/fail2ban/jail.local
 # Managed by OpenVox - manual edits will be overwritten
@@ -29,3 +36,22 @@ ignoreip = 127.0.0.1/8 ::1
 [sshd]
 enabled = true
 port    = ssh
+
+<% if $immich_enabled { -%>
+# Immich failed logins: 10 failures in 10 minutes -> ban 24 hours
+[immich]
+enabled  = true
+port     = <%= $immich_port %>
+filter   = immich
+# Never ban localhost (also covered by [DEFAULT] ignoreip)
+ignoreip = 127.0.0.1/8 ::1
+maxretry = <%= $immich_maxretry %>
+bantime  = <%= $immich_bantime %>
+findtime = <%= $immich_findtime %>
+<% if $immich_logpath { -%>
+logpath  = <%= $immich_logpath %>
+<% } else { -%>
+backend      = systemd
+journalmatch = <%= $immich_journalmatch %>
+<% } -%>
+<% } -%>

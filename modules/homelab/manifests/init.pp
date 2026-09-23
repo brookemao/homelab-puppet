@@ -1,23 +1,26 @@
 # @summary Homelab baseline configuration for RHEL 10
 #
-# Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, ddclient, and Immich
+# Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, ddclient, TLS,
+# nginx, and Immich
 #
 # @param manage_services Whether to manage and start background services (fail2ban,
-#   ddclient, and the immich systemd unit)
+#   ddclient, certificate renewal, nginx, and the immich systemd unit)
 # @param ddclient_install_method 'tarball' (from GitHub release tarball) or 'package' (via dnf)
 # @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0'
 # @param cloudflare_token API token for Cloudflare DDNS
 # @param cloudflare_zone Root zone for Cloudflare DDNS
 # @param cloudflare_domains Comma-separated domains to update
 # @param ddclient_replace_config Whether to overwrite ddclient.conf if it exists
+# @param acme_email Contact email for Let's Encrypt registration (defaults to admin@<cloudflare_zone>)
 class homelab (
   Boolean   $manage_services         = true,
   String[1] $ddclient_install_method = 'tarball',
   String[1] $ddclient_release_tag    = 'latest',
   String[1] $cloudflare_token        = '<SECRET TOKEN HERE>',
   String[1] $cloudflare_zone         = 'brookemao.ca',
-  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca',
+  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca',
   Boolean   $ddclient_replace_config = false,
+  Optional[String[1]] $acme_email    = undef,
 ) {
   # 1. Enable CRB & Install EPEL 10 repository
   class { 'homelab::epel': }
@@ -56,7 +59,23 @@ class homelab (
     require            => Class['homelab::epel'],
   }
 
-  # 8. Deploy Immich. Everything else uses the class defaults; override with immich::* Hiera keys.
+  # 8. Obtain wildcard Let's Encrypt certificate via Cloudflare DNS-01 (after ddclient)
+  class { 'homelab::letsencrypt':
+    cloudflare_token => $cloudflare_token,
+    cloudflare_zone  => $cloudflare_zone,
+    email            => $acme_email,
+    manage_service   => $manage_services,
+    require          => Class['homelab::ddclient'],
+  }
+
+  # 9. Install nginx as a TLS-terminating reverse proxy (needs the certificate first)
+  class { 'homelab::nginx':
+    cert_name      => $cloudflare_zone,
+    manage_service => $manage_services,
+    require        => [Class['homelab::ddclient'], Class['homelab::letsencrypt']],
+  }
+
+  # 10. Deploy Immich. Everything else uses the class defaults; override with immich::* Hiera keys.
   class { 'immich':
     manage_service => $manage_services,
   }

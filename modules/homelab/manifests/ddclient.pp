@@ -20,7 +20,7 @@ class homelab::ddclient (
   Boolean                    $service_enable    = true,
   String[1]                  $cloudflare_token   = '<SECRET TOKEN HERE>',
   String[1]                  $cloudflare_zone    = 'brookemao.ca',
-  String[1]                  $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca',
+  String[1]                  $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca',
   Boolean                    $replace_config    = false,
 ) {
   require homelab::epel

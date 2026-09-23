@@ -1,0 +1,11 @@
+[Unit]
+Description=Check twice daily for Let's Encrypt certificate renewal (homelab)
+Documentation=https://certbot.eff.org/
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,6 +1,6 @@
 <%- | String[1] $cloudflare_token   = '<SECRET TOKEN HERE>',
       String[1] $cloudflare_zone    = 'brookemao.ca',
-      String[1] $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca',
+      String[1] $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca',
 | -%>
 # /etc/ddclient/ddclient.conf
 # Dynamic DNS Client configuration
