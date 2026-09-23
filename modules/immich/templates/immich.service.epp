@@ -1,0 +1,27 @@
+<%- |
+  String $compose_command,
+  String $compose_file,
+  String $install_dir,
+  String $data_dir,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+[Unit]
+Description=Immich photo server (podman-compose)
+Documentation=https://immich.app
+Wants=network-online.target
+After=network-online.target
+# If <%= $data_dir %> is a separate mount, don't start until it is there
+RequiresMountsFor=<%= $data_dir %>
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=<%= $install_dir %>
+ExecStart=<%= $compose_command %> -f <%= $compose_file %> up -d --remove-orphans
+ExecStop=<%= $compose_command %> -f <%= $compose_file %> down
+# First start pulls several GB of images
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

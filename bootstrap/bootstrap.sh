@@ -144,10 +144,11 @@ info "Step 3/4: Installing required Puppet Forge modules..."
 # puppet-firewalld pulls in its dependencies (puppetlabs-stdlib, puppetlabs-augeas_core) automatically.
 # southalc-podman pulls in its dependencies (puppetlabs-stdlib, puppetlabs-concat,
 # puppetlabs-selinux_core, puppetlabs-inifile, puppet-systemd, southalc-hashfile) automatically.
+# puppet-selinux (used by the immich module for its file context rule) needs only puppetlabs-stdlib.
 # puppet-nginx pulls in its dependencies (puppetlabs-concat, puppetlabs-stdlib) automatically.
 # puppet-fail2ban pulls in its dependency (puppetlabs-stdlib) automatically.
 # puppet-letsencrypt pulls in its dependencies (puppetlabs-stdlib, puppetlabs-inifile, puppet-epel) automatically.
-for _forge_module in puppet-firewalld southalc-podman puppet-nginx puppet-fail2ban puppet-letsencrypt; do
+for _forge_module in puppet-firewalld southalc-podman puppet-selinux puppet-nginx puppet-fail2ban puppet-letsencrypt; do
     if ! $SUDO puppet module install "${_forge_module}" --modulepath "${PROJECT_ROOT}/modules"; then
         warn "Could not install ${_forge_module} (it may already be installed). Continuing..."
     fi

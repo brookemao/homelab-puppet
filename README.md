@@ -16,6 +16,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **nginx**: Host-aware TLS reverse proxy (via `puppet-nginx`) — `photos.brookemao.ca` forwards to the backend web server on port `2283` with `X-Forwarded-For`; all other hosts hit the catch-all default page.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
+- **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 
 ---
 
@@ -23,32 +24,15 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 
 ```text
 .
-├── bootstrap/
-│   └── bootstrap.sh            # Automated bootstrap script (installs OpenVox, prompts secrets, runs apply)
-├── data/
-│   ├── common.yaml             # Hiera common configuration parameters
-│   └── secrets.yaml.example    # Template for private credentials (copied to secrets.yaml)
-├── environment.conf            # Environment modulepath definition
-├── hiera.yaml                  # Hiera 5 hierarchy configuration
-├── manifests/
-│   └── site.pp                 # Masterless manifest entrypoint for `puppet apply`
-├── modules/
-│   └── homelab/
-│       ├── manifests/
-│       │   ├── init.pp         # Main class orchestrating baseline setup
-│       │   ├── epel.pp         # CRB repository enablement & EPEL 10 package
-│       │   ├── git.pp          # Git package installation
-│       │   ├── fastfetch.pp    # Fastfetch installation
-│       │   ├── fail2ban.pp     # Fail2ban + firewalld packages & service
-│       │   ├── firewall.pp     # Firewalld service & public zone 443/tcp rule (puppet-firewalld)
-│       │   ├── podman.pp       # Podman + podman-compose packages (compose from EPEL)
-│       │   ├── nginx.pp        # Nginx TLS reverse proxy to backend :2283 with X-Forwarded-For (puppet-nginx)
-│       │   ├── letsencrypt.pp  # Wildcard cert via Cloudflare DNS-01 + twice-daily renew timer (puppet-letsencrypt)
-│       │   └── ddclient.pp     # GitHub release tarball build & systemd service
-│       └── templates/
-│           ├── ddclient.conf.epp   # ddclient configuration template (Cloudflare snippet)
-│           └── jail.local.epp      # fail2ban jail configuration template
-└── README.md
+├── bootstrap/bootstrap.sh   # Installs OpenVox, prompts for secrets, runs apply
+├── data/                    # Hiera data: common.yaml, secrets.yaml.example
+├── hiera.yaml               # Hiera 5 hierarchy
+├── environment.conf         # modulepath
+├── manifests/site.pp        # Masterless entrypoint for `puppet apply`
+└── modules/
+    ├── homelab/             # Site profile: epel, git, fastfetch, fail2ban, firewall, podman,
+    │                        #   ddclient, Let's Encrypt, nginx (TLS proxy); declares immich
+    └── immich/              # Immich stack: compose.yml + systemd unit
 ```
 
 ---
@@ -119,6 +103,10 @@ This project uses standard Hiera 5 data lookups.
 - **`data/secrets.yaml`** *(gitignored)*: Holds private tokens and keys:
   ```yaml
   homelab::cloudflare_token: 'your_real_token_here'
+
+  # Optional. Defaults to 'immich' if omitted. See "Managing Immich" below
+  # before changing this on a host that has already run once.
+  immich::db_password: 'your_immich_db_password_here'
   ```
   Create it from the example:
   ```bash
@@ -130,6 +118,8 @@ This project uses standard Hiera 5 data lookups.
 
 ## Parameters
 
+### `homelab` (baseline)
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `manage_services` | `Boolean` | `true` | Whether to manage and enable background services (`fail2ban`, `ddclient`) |
@@ -139,6 +129,45 @@ This project uses standard Hiera 5 data lookups.
 | `cloudflare_zone` | `String` | `'brookemao.ca'` | Cloudflare root domain zone |
 | `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca'` | Subdomains to update |
 | `ddclient_replace_config` | `Boolean` | `false` | Whether to overwrite existing `/etc/ddclient/ddclient.conf` |
+
+### `immich`
+
+Set these with `immich::<name>` Hiera keys. All are optional - the class defaults apply
+when no key is present, which is why `data/common.yaml` carries none of them.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `db_password` | `Sensitive[String]` | `Sensitive('immich')` | PostgreSQL password. Only read at database initialisation - see below |
+| `version` | `String` | `'v3.2.2'` | Immich image tag |
+| `timezone` | `String` | `'America/Los_Angeles'` | `TZ` passed to the containers |
+| `port` | `Integer[1, 65535]` | `2283` | Host port published for the web UI |
+| `cpu_limit` | `Numeric` | `4` | Cores the whole stack may use |
+| `memory_limit` | `String` | `'16g'` | Memory the whole stack may use |
+| `base_dir` | `Immich::Absolutepath` | `'/home/immich'` | Directory the deployment lives under; created if missing, never restyled. Its own parent must already exist |
+| `install_dir` | `Immich::Absolutepath` | `'/opt/immich-app'` | Holds the generated `compose.yml` |
+
+Everything the containers persist lives under `base_dir/data` in a fixed layout, which is what
+lets a single SELinux rule and a single ownership scheme cover all of it:
+
+```text
+/home/immich/                      root:root 0755, not container-accessible
+└── data/                          immich:immich 0750, container_file_t
+    ├── library/                   photo and video library
+    ├── postgres/                  database (mode 0700)
+    ├── ml-model-cache/            machine learning models
+    └── redis/                     Valkey persistence
+```
+
+Move the lot by setting `base_dir`; the paths underneath are not separately configurable.
+Only `base_dir` itself is created, so its parent (`/home` by default) must already exist.
+
+The `data/` level is structural, not a convention. The SELinux rule is recursive over
+`base_dir/data`, so anything placed beside it - backups, exports - stays outside the
+container label and is unreachable by the containers.
+
+The `immich` service account (`user`, `group`, `uid`, `gid`), SELinux (`manage_selinux`,
+`selinux_type`) and the unit itself (`compose_command`, `manage_service`, `service_name`)
+are also parameters - see the class header in `modules/immich/manifests/init.pp`.
 
 ---
 
@@ -166,3 +195,67 @@ homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca
    sudo systemctl status ddclient
    ```
 *(Note: `replace => false` by default ensures your API credentials will never be overwritten on subsequent runs unless `ddclient_replace_config=true` is explicitly provided).*
+
+---
+
+## Managing Immich
+
+Puppet writes `/opt/immich-app/compose.yml` and a systemd unit at
+`/etc/systemd/system/immich.service`, then enables it. The unit wraps
+`podman-compose up -d` / `down` and is what brings the stack back after a reboot - podman
+is daemonless, so `restart: always` in the compose file alone would not survive one.
+
+```bash
+sudo systemctl status immich      # is the stack up?
+sudo systemctl restart immich     # down, then up
+sudo journalctl -u immich         # compose output
+sudo podman ps                    # the four containers
+sudo podman logs immich_server    # logs from one container
+```
+
+The web UI listens on `2283`. `homelab::firewall` only opens `443/tcp`, so that port is
+reachable from the host but not through firewalld from the LAN.
+
+### Caveats
+
+- **Set `immich::db_password` before the first run.** PostgreSQL reads it only when
+  initialising its data directory; changing it later does not re-key an existing database,
+  and the server container starts failing to authenticate.
+- **SELinux is handled, but verify it took.** Run `ls -Z /home/immich/data` after the
+  first apply; you want `container_file_t`. If it still reads `user_home_t` the containers
+  will be denied access despite correct Unix ownership, and because `podman-compose up -d`
+  exits `0` regardless, the run looks clean while PostgreSQL fails behind it. Check
+  `sudo podman logs immich_postgres` and `sudo ausearch -m avc -ts recent`.
+
+The first start pulls several GB of images; the unit allows 15 minutes for it.
+
+### Resource limits
+
+`cpu_limit` and `memory_limit` cap the stack **collectively**, not per container. All four
+services together get 4 cores and 16 GB.
+
+podman-compose puts every service of a project into a pod (`pod_immich` here), and a pod
+is a cgroup. Limiting the pod limits everything inside it, so the compose file sets the
+limits on `podman pod create` rather than on each service:
+
+```yaml
+x-podman:
+  pod_args:
+    - --infra=false
+    - --share=
+    - --cpus=4
+    - --memory=16g
+```
+
+`pod_args` **replaces** podman-compose's defaults rather than extending them, which is why
+`--infra=false` and `--share=` are repeated - dropping them would change how the stack is
+networked.
+
+Check it took with `podman pod inspect pod_immich`, or read the cgroup directly:
+
+```bash
+cat /sys/fs/cgroup/machine.slice/*libpod_pod*/memory.max
+cat /sys/fs/cgroup/machine.slice/*libpod_pod*/cpu.max
+```
+
+Pod-level limits need cgroups v2, which RHEL 10 uses by default.

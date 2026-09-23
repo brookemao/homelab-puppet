@@ -1,8 +1,10 @@
 # @summary Homelab baseline configuration for RHEL 10
 #
-# Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, ddclient, TLS, and nginx
+# Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, ddclient, TLS,
+# nginx, and Immich
 #
-# @param manage_services Whether to manage and start background services
+# @param manage_services Whether to manage and start background services (fail2ban,
+#   ddclient, certificate renewal, nginx, and the immich systemd unit)
 # @param ddclient_install_method 'tarball' (from GitHub release tarball) or 'package' (via dnf)
 # @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0'
 # @param cloudflare_token API token for Cloudflare DDNS
@@ -72,4 +74,10 @@ class homelab (
     manage_service => $manage_services,
     require        => [Class['homelab::ddclient'], Class['homelab::letsencrypt']],
   }
+
+  # 10. Deploy Immich. Everything else uses the class defaults; override with immich::* Hiera keys.
+  class { 'immich':
+    manage_service => $manage_services,
+  }
+  Class['homelab::podman'] -> Class['immich']
 }

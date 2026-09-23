@@ -1,0 +1,100 @@
+<%- |
+  String  $version,
+  String  $timezone,
+  String  $db_password,
+  Integer $port,
+  String  $upload_location,
+  String  $db_location,
+  String  $ml_cache,
+  String  $redis_location,
+  Integer $uid,
+  Integer $gid,
+  Numeric $cpu_limit,
+  String  $memory_limit,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+name: immich
+
+# podman-compose puts every service in a pod (pod_immich), so limiting the pod caps the
+# four containers collectively rather than each one individually.
+# pod_args REPLACES podman-compose's defaults, so --infra=false and --share= are repeated
+# here deliberately - dropping them would change how the stack is networked.
+x-podman:
+  pod_args:
+    - --infra=false
+    - --share=
+    - --cpus=<%= $cpu_limit %>
+    - --memory=<%= $memory_limit %>
+
+services:
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:<%= $version %>
+    volumes:
+      - <%= $upload_location %>:/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      TZ: "<%= $timezone %>"
+      DB_PASSWORD: "<%= $db_password %>"
+    ports:
+      - "<%= $port %>:2283"
+    depends_on:
+      - redis
+      - database
+    restart: always
+    healthcheck:
+      disable: false
+    user: "<%= $uid %>:<%= $gid %>"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    image: ghcr.io/immich-app/immich-machine-learning:<%= $version %>
+    volumes:
+      - <%= $ml_cache %>:/cache
+    restart: always
+    healthcheck:
+      disable: false
+    user: "<%= $uid %>:<%= $gid %>"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+
+  redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:9@sha256:4963247afc4cd33c7d3b2d2816b9f7f8eeebab148d29056c2ca4d7cbc966f2d9
+    healthcheck:
+      test: redis-cli ping || exit 1
+    volumes:
+      - <%= $redis_location %>:/data
+    restart: always
+    user: "<%= $uid %>:<%= $gid %>"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+
+  database:
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    environment:
+      POSTGRES_PASSWORD: "<%= $db_password %>"
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: --data-checksums
+      DB_STORAGE_TYPE: SSD
+    volumes:
+      - <%= $db_location %>:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: always
+    healthcheck:
+      disable: false
+    user: "<%= $uid %>:<%= $gid %>"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
