@@ -52,15 +52,16 @@ proxy_set_header X-SSL-Client-DN $ssl_client_s_dn;
 ```
 - `puppet-nginx` may lack first-class `ssl_verify_client` params — use `server_cfg_append`/`raw_append` fallback.
 
-## 4. SELinux — no boolean
+## 4. SELinux — no boolean, no http_port_t
 
-- Install `policycoreutils-python-utils` for `semanage`.
-- Least-privilege port label only (do NOT set `httpd_can_network_connect`):
+- Install `policycoreutils-python-utils` (`semanage`/`semodule`), `policycoreutils` (`semodule_package`), `checkpolicy` (`checkmodule`).
+- Keep TCP 9090 labeled with Cockpit's own type (revert any `http_port_t` labeling — Cockpit's policy does not expect that and it can break its bind):
 ```bash
-semanage port -a -t http_port_t -p tcp 9090  # use -m if already defined
-# verify: semanage port -l | grep http_port_t  # must show 9090
+semanage port -m -t cockpit_port_t -p tcp 9090  # use -a if not yet defined
+# verify: semanage port -l | grep cockpit_port_t  # must show 9090
 ```
-- In Puppet: `exec` with `unless => 'semanage port -l | grep -E "http_port_t.*9090"'`, or `selinux::port` if `puppet-selinux` is added.
+- Grant nginx (`httpd_t`) least-privilege access via a vendored allow module (`modules/homelab/files/nginx_cockpit.te`, `allow httpd_t cockpit_port_t:tcp_socket name_connect`), compiled and installed with `checkmodule`/`semodule_package`/`semodule -i`. Do NOT set `httpd_can_network_connect`.
+- In Puppet (`homelab::cockpit`): `exec` for the port label plus `file` + refresh-only `exec` for the module build/install. Bump the `policy_module` version in the `.te` file when the rule changes so `semodule -i` picks it up.
 
 ## 5. DNS / firewall / LE
 
@@ -86,4 +87,4 @@ semanage port -a -t http_port_t -p tcp 9090  # use -m if already defined
 
 - `nginx -t; systemctl restart cockpit nginx` (or `puppet apply --noop` first).
 - With cert: Cockpit UI + websocket terminal works. Without cert: handshake fails. `journalctl -u nginx -u cockpit`, `ausearch -m avc -ts recent` clean.
-- Rollback: remove cockpit vhost, `semanage port -d -t http_port_t -p tcp 9090` only if we added it, restore `cockpit.conf`.
+- Rollback: remove cockpit vhost, `semodule -r nginx_cockpit`, restore `cockpit.conf` (leave the `cockpit_port_t` label — it is Cockpit's default).
