@@ -57,7 +57,8 @@ class homelab::nginx (
   # https://garrett.github.io/cockpit-project.github.io/external/wiki/Proxying-Cockpit-over-NGINX
   # plus ssl_client_certificate / ssl_verify_client for client certs signed
   # by the personal PKI root. SELinux access to 9090 is granted by
-  # homelab::cockpit via an http_port_t port label (no httpd_can_network_connect).
+  # homelab::cockpit (cockpit_port_t label + nginx_cockpit allow module,
+  # no httpd_can_network_connect).
   # Cockpit serves its own self-signed cert on localhost, so upstream
   # verification is explicitly off (nginx default; stated for clarity).
   # puppet-nginx has no native proxy_ssl_verify param, hence location_cfg_append.

@@ -11,10 +11,10 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban).
-- **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` allowed in the default `public` zone.
+- **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` allowed in the default `public` zone, plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (non-loopback rejected).
 - **podman**: Container runtime with `podman-compose` (from EPEL) for compose workloads.
 - **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
-- **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with SELinux least privilege — TCP `9090` labeled `http_port_t` so nginx can connect without `httpd_can_network_connect`.
+- **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with SELinux least privilege — TCP `9090` stays `cockpit_port_t` and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
