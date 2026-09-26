@@ -1,0 +1,6 @@
+<%- | String[1] $server_name = 'cockpit.brookemao.ca' | -%>
+# Managed by Puppet (homelab::cockpit). See:
+# https://garrett.github.io/cockpit-project.github.io/external/wiki/Proxying-Cockpit-over-NGINX
+[WebService]
+Origins = https://<%= $server_name %> wss://<%= $server_name %>
+ProtocolHeader = X-Forwarded-Proto
