@@ -59,7 +59,7 @@ class homelab (
     require            => Class['homelab::epel'],
   }
 
-  # 8. Install and configure Cockpit (proxy-aware cockpit.conf, cockpit_port_t on 9090, nginx allow module)
+  # 8. Install and configure Cockpit (proxy-aware cockpit.conf, websm_port_t on 9090, nginx allow module)
   class { 'homelab::cockpit':
     manage_service => $manage_services,
     require        => Class['homelab::epel'],

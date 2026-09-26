@@ -1,14 +1,14 @@
-policy_module(nginx_cockpit, 1.0.1)
+policy_module(nginx_cockpit, 1.0.2)
 
 require {
   type httpd_t;
-  type cockpit_port_t;
+  type websm_port_t;
   class tcp_socket name_connect;
 }
 
 # Allow nginx (httpd_t) to reverse-proxy to Cockpit on TCP 9090.
-# Least-privilege alternative to `setsebool -P httpd_can_network_connect on`
-# and to relabeling 9090 as http_port_t (which Cockpit's own policy does not
-# expect and can break Cockpit's bind). Bump the version above whenever this
-# rule changes so `semodule -i` picks up the update.
-allow httpd_t cockpit_port_t:tcp_socket name_connect;
+# 9090 is labeled websm_port_t in RHEL policy (Cockpit's historical type;
+# there is no cockpit_port_t — `semanage port -l | grep 9090` confirms).
+# Least-privilege alternative to httpd_can_network_connect. Bump the version
+# above whenever this rule changes so `semodule -i` picks up the update.
+allow httpd_t websm_port_t:tcp_socket name_connect;
