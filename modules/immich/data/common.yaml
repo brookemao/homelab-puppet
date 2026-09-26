@@ -1,0 +1,7 @@
+---
+# Hiera returns plain strings, and Puppet does not wrap them in Sensitive on its own. Without
+# this, setting immich::db_password in data/secrets.yaml fails the catalog with a type
+# mismatch against Sensitive[String[1]].
+lookup_options:
+  immich::db_password:
+    convert_to: "Sensitive"
