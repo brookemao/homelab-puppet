@@ -28,17 +28,12 @@ class homelab::cockpit (
     ensure => $package_ensure,
   }
 
-  # Provides `semanage`/`semodule`/`semodule_package` for the SELinux work below.
+  # Provides `semanage`/`semodule` for the SELinux work below.
   package { 'policycoreutils-python-utils':
     ensure => installed,
   }
 
   package { 'policycoreutils':
-    ensure => installed,
-  }
-
-  # Provides `checkmodule` to compile the .te policy source.
-  package { 'checkpolicy':
     ensure => installed,
   }
 
@@ -66,8 +61,9 @@ class homelab::cockpit (
   }
 
   # Least-privilege nginx -> Cockpit access: allow httpd_t name_connect to
-  # websm_port_t. Compiled and installed from the vendored .te source;
-  # bump the policy_module version in that file when the rule changes.
+  # websm_port_t. Installed directly from vendored CIL source, which needs
+  # no compiler toolchain (semodule consumes .cil natively); reapplied
+  # whenever the source changes.
   file { $selinux_policy_dir:
     ensure => directory,
     owner  => 'root',
@@ -75,22 +71,22 @@ class homelab::cockpit (
     mode   => '0755',
   }
 
-  file { "${selinux_policy_dir}/${selinux_module_name}.te":
+  file { "${selinux_policy_dir}/${selinux_module_name}.cil":
     ensure  => file,
     owner   => 'root',
     group   => 'root',
     mode    => '0644',
-    source  => "puppet:///modules/homelab/${selinux_module_name}.te",
+    source  => "puppet:///modules/homelab/${selinux_module_name}.cil",
     require => [Package['cockpit'], File[$selinux_policy_dir]],
   }
 
   exec { "install-${selinux_module_name}-selinux-module":
-    command     => "checkmodule -M -m -o ${selinux_policy_dir}/${selinux_module_name}.mod ${selinux_policy_dir}/${selinux_module_name}.te && semodule_package -o ${selinux_policy_dir}/${selinux_module_name}.pp -m ${selinux_policy_dir}/${selinux_module_name}.mod && semodule -i ${selinux_policy_dir}/${selinux_module_name}.pp",
-    subscribe   => File["${selinux_policy_dir}/${selinux_module_name}.te"],
+    command     => "semodule -i ${selinux_policy_dir}/${selinux_module_name}.cil",
+    subscribe   => File["${selinux_policy_dir}/${selinux_module_name}.cil"],
     refreshonly => true,
+    logoutput   => on_failure,
     path        => ['/usr/bin', '/usr/sbin', '/bin', '/sbin'],
     require     => [
-      Package['checkpolicy'],
       Package['policycoreutils'],
       Package['policycoreutils-python-utils'],
     ],
