@@ -109,7 +109,7 @@ else
     echo "------------------------------------------------------------"
     echo " Cloudflare Dynamic DNS Configuration for ddclient          "
     echo " Target zone:    brookemao.ca                               "
-    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca, photos.brookemao.ca"
+    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca, photos.brookemao.ca, cockpit.brookemao.ca"
     echo "------------------------------------------------------------"
     echo -n "Enter Cloudflare API Key / Token (hidden): "
     read -r -s CF_KEY

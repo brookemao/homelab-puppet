@@ -1,7 +1,7 @@
 # @summary Homelab baseline configuration for RHEL 10
 #
 # Sets up the EPEL repository, git, fastfetch, firewalld, fail2ban, podman, ddclient, TLS,
-# nginx, and Immich
+# Cockpit, nginx, and Immich
 #
 # @param manage_services Whether to manage and start background services (fail2ban,
 #   ddclient, certificate renewal, nginx, and the immich systemd unit)
@@ -18,7 +18,7 @@ class homelab (
   String[1] $ddclient_release_tag    = 'latest',
   String[1] $cloudflare_token        = '<SECRET TOKEN HERE>',
   String[1] $cloudflare_zone         = 'brookemao.ca',
-  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca',
+  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca',
   Boolean   $ddclient_replace_config = false,
   Optional[String[1]] $acme_email    = undef,
 ) {
@@ -59,7 +59,13 @@ class homelab (
     require            => Class['homelab::epel'],
   }
 
-  # 8. Obtain wildcard Let's Encrypt certificate via Cloudflare DNS-01 (after ddclient)
+  # 8. Install and configure Cockpit (proxy-aware cockpit.conf + SELinux http_port_t label on 9090)
+  class { 'homelab::cockpit':
+    manage_service => $manage_services,
+    require        => Class['homelab::epel'],
+  }
+
+  # 9. Obtain wildcard Let's Encrypt certificate via Cloudflare DNS-01 (after ddclient)
   class { 'homelab::letsencrypt':
     cloudflare_token => $cloudflare_token,
     cloudflare_zone  => $cloudflare_zone,
@@ -68,11 +74,11 @@ class homelab (
     require          => Class['homelab::ddclient'],
   }
 
-  # 9. Install nginx as a TLS-terminating reverse proxy (needs the certificate first)
+  # 10. Install nginx as a TLS-terminating reverse proxy (needs the certificate and Cockpit first)
   class { 'homelab::nginx':
     cert_name      => $cloudflare_zone,
     manage_service => $manage_services,
-    require        => [Class['homelab::ddclient'], Class['homelab::letsencrypt']],
+    require        => [Class['homelab::cockpit'], Class['homelab::ddclient'], Class['homelab::letsencrypt']],
   }
 
   # 10. Deploy Immich. Everything else uses the class defaults; override with immich::* Hiera keys.

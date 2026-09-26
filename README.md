@@ -13,7 +13,8 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban).
 - **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` allowed in the default `public` zone.
 - **podman**: Container runtime with `podman-compose` (from EPEL) for compose workloads.
-- **nginx**: Host-aware TLS reverse proxy (via `puppet-nginx`) — `photos.brookemao.ca` forwards to the backend web server on port `2283` with `X-Forwarded-For`; all other hosts hit the catch-all default page.
+- **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
+- **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with SELinux least privilege — TCP `9090` labeled `http_port_t` so nginx can connect without `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
@@ -31,7 +32,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 ├── manifests/site.pp        # Masterless entrypoint for `puppet apply`
 └── modules/
     ├── homelab/             # Site profile: epel, git, fastfetch, fail2ban, firewall, podman,
-    │                        #   ddclient, Let's Encrypt, nginx (TLS proxy); declares immich
+    │                        #   ddclient, Let's Encrypt, cockpit, nginx (mTLS proxy); declares immich
     └── immich/              # Immich stack: compose.yml + systemd unit
 ```
 
@@ -96,7 +97,7 @@ This project uses standard Hiera 5 data lookups.
   homelab::ddclient_install_method: 'tarball'
   homelab::ddclient_release_tag: 'latest'
   homelab::cloudflare_zone: 'brookemao.ca'
-  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca'
+  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca'
   homelab::ddclient_replace_config: false
   ```
 
@@ -127,7 +128,7 @@ This project uses standard Hiera 5 data lookups.
 | `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag past 4.0.0) or specific tag (e.g. `'v4.0.0'`) |
 | `cloudflare_token` | `String` | `'<SECRET TOKEN HERE>'` | Cloudflare API Token for dynamic DNS updates |
 | `cloudflare_zone` | `String` | `'brookemao.ca'` | Cloudflare root domain zone |
-| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca'` | Subdomains to update |
+| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca'` | Subdomains to update |
 | `ddclient_replace_config` | `Boolean` | `false` | Whether to overwrite existing `/etc/ddclient/ddclient.conf` |
 
 ### `immich`
@@ -182,7 +183,7 @@ zone=brookemao.ca,            \
 ttl=1,                      \
 login=token,    \
 password=<SECRET TOKEN HERE> \
-homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca
+homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca
 ```
 
 1. If you ran without supplying a token, update the secret in `/etc/ddclient/ddclient.conf`:
