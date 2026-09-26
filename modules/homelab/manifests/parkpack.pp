@@ -26,9 +26,11 @@ class homelab::parkpack (
     $seltype ? { undef => [], default => ["context=\"system_u:object_r:${seltype}:s0\""] },
   ].flatten
 
-  # Once mounted this is the drive's root, so leave its ownership and mode alone
+  # Once mounted this is the drive's root, so leave its ownership and mode alone. Its label
+  # comes from context=, which can't be changed, so don't try to restore the default one.
   file { $mountpoint:
-    ensure => directory,
+    ensure                  => directory,
+    selinux_ignore_defaults => true,
   }
 
   mount { $mountpoint:
