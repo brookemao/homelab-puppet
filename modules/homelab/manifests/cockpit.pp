@@ -28,6 +28,15 @@ class homelab::cockpit (
     ensure => $package_ensure,
   }
 
+  # Provides the cockpit_port_t type and Cockpit's own policy. The 'cockpit'
+  # metapackage does not guarantee this on a minimal install; without it,
+  # `semanage port -t cockpit_port_t` fails with "Type cockpit_port_t is
+  # invalid, must be a port type".
+  package { 'cockpit-selinux':
+    ensure  => installed,
+    require => Package['cockpit'],
+  }
+
   # Provides `semanage`/`semodule`/`semodule_package` for the SELinux work below.
   package { 'policycoreutils-python-utils':
     ensure => installed,
@@ -56,13 +65,18 @@ class homelab::cockpit (
   # bind — a mislabeled port makes cockpit.socket fail with "Input/output
   # error" on bind, so the service below orders after this exec.)
   # Delete-then-add is deterministic: -d drops any stale definition (e.g.
-  # http_port_t), -a recreates it as cockpit_port_t.
+  # http_port_t); `|| true` tolerates "not defined" / "defined in policy".
+  # The final -a runs unsilenced so real errors surface via logoutput.
   exec { 'selinux-cockpit-port':
-    command   => "semanage port -d -p tcp ${port} 2>/dev/null; semanage port -a -t cockpit_port_t -p tcp ${port}",
+    command   => "semanage port -d -p tcp ${port} || true; semanage port -a -t cockpit_port_t -p tcp ${port}",
     unless    => "semanage port -l | grep -E '^cockpit_port_t.*\\b${port}\\b'",
     logoutput => on_failure,
     path      => ['/usr/sbin', '/usr/bin', '/sbin', '/bin'],
-    require   => [Package['cockpit'], Package['policycoreutils-python-utils']],
+    require   => [
+      Package['cockpit'],
+      Package['cockpit-selinux'],
+      Package['policycoreutils-python-utils'],
+    ],
   }
 
   # Least-privilege nginx -> Cockpit access: allow httpd_t name_connect to
