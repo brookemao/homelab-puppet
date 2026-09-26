@@ -1,8 +1,9 @@
-# Enforce LF line endings for shell scripts and manifest files
+# Enforce LF line endings for shell scripts, manifests, and policy sources
 *.sh text eol=lf
 *.pp text eol=lf
 *.epp text eol=lf
 *.te text eol=lf
+*.cil text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
 *.md text eol=lf

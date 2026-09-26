@@ -1,0 +1,7 @@
+; nginx_cockpit.cil - allow nginx (httpd_t) to reverse-proxy to Cockpit.
+; TCP 9090 is labeled websm_port_t in RHEL policy (Cockpit's historical type).
+; Least-privilege alternative to httpd_can_network_connect.
+; Installed with: semodule -i nginx_cockpit.cil
+; Removed with:   semodule -r nginx_cockpit
+(block nginx_cockpit
+  (allow httpd_t websm_port_t (tcp_socket (name_connect))))

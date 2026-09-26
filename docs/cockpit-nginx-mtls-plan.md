@@ -54,13 +54,13 @@ proxy_set_header X-SSL-Client-DN $ssl_client_s_dn;
 
 ## 4. SELinux — no boolean, no http_port_t
 
-- Install `policycoreutils-python-utils` (`semanage`/`semodule`), `policycoreutils` (`semodule_package`), `checkpolicy` (`checkmodule`).
+- Install `policycoreutils-python-utils` (`semanage`) and `policycoreutils` (`semodule`).
 - Keep TCP 9090 on its policy-shipped `websm_port_t` label (Cockpit's historical type name; there is no `cockpit_port_t` on RHEL — `semanage port -l | grep 9090` confirms). Drop any stale local customization; only (re)add the label if policy ever stops shipping it.
 ```bash
 semanage port -l | grep -w 9090  # expect websm_port_t; fix local overrides only
 ```
-- Grant nginx (`httpd_t`) least-privilege access via a vendored allow module (`modules/homelab/files/nginx_cockpit.te`, `allow httpd_t websm_port_t:tcp_socket name_connect`), compiled and installed with `checkmodule`/`semodule_package`/`semodule -i`. Do NOT set `httpd_can_network_connect`.
-- In Puppet (`homelab::cockpit`): `exec` for the port label plus `file` + refresh-only `exec` for the module build/install. Bump the `policy_module` version in the `.te` file when the rule changes so `semodule -i` picks it up.
+- Grant nginx (`httpd_t`) least-privilege access via a vendored CIL module (`modules/homelab/files/nginx_cockpit.cil`, `(allow httpd_t websm_port_t (tcp_socket (name_connect)))`), installed with `semodule -i` — no compiler toolchain (the earlier `.te` used the refpolicy m4 macro `policy_module(...)`, which bare `checkmodule` does not parse; CIL sidesteps the compiler entirely). Do NOT set `httpd_can_network_connect`.
+- In Puppet (`homelab::cockpit`): `exec` for the port label plus `file` + refresh-only `exec` for the module install. The install re-fires whenever the `.cil` source changes.
 
 ## 5. DNS / firewall / LE
 
