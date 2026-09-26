@@ -53,13 +53,16 @@ class homelab::cockpit (
 
   # Restore TCP 9090 to Cockpit's own type. (An earlier revision labeled it
   # http_port_t, which Cockpit's policy does not expect and can break its
-  # bind, so we put cockpit_port_t back instead.)
-  # The `-m || -a` fallback handles both relabeling and fresh definitions.
+  # bind — a mislabeled port makes cockpit.socket fail with "Input/output
+  # error" on bind, so the service below orders after this exec.)
+  # Delete-then-add is deterministic: -d drops any stale definition (e.g.
+  # http_port_t), -a recreates it as cockpit_port_t.
   exec { 'selinux-cockpit-port':
-    command => "semanage port -m -t cockpit_port_t -p tcp ${port} || semanage port -a -t cockpit_port_t -p tcp ${port}",
-    unless  => "semanage port -l | grep -E '^cockpit_port_t.*\\b${port}\\b'",
-    path    => ['/usr/sbin', '/usr/bin', '/sbin', '/bin'],
-    require => [Package['cockpit'], Package['policycoreutils-python-utils']],
+    command   => "semanage port -d -p tcp ${port} 2>/dev/null; semanage port -a -t cockpit_port_t -p tcp ${port}",
+    unless    => "semanage port -l | grep -E '^cockpit_port_t.*\\b${port}\\b'",
+    logoutput => on_failure,
+    path      => ['/usr/sbin', '/usr/bin', '/sbin', '/bin'],
+    require   => [Package['cockpit'], Package['policycoreutils-python-utils']],
   }
 
   # Least-privilege nginx -> Cockpit access: allow httpd_t name_connect to
@@ -97,7 +100,7 @@ class homelab::cockpit (
     service { 'cockpit.socket':
       ensure    => running,
       enable    => true,
-      require   => Package['cockpit'],
+      require   => [Package['cockpit'], Exec['selinux-cockpit-port']],
       subscribe => File['/etc/cockpit/cockpit.conf'],
     }
   }
