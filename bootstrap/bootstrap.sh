@@ -3,7 +3,7 @@
 # bootstrap.sh - Bootstrap OpenVox (masterless) and run homelab baseline configuration
 #
 # 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
-# 2. Prompts for required secrets (Cloudflare API Key for ddclient)
+# 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password)
 # 3. Executes masterless run with sudo (`sudo puppet apply`)
 #
 
@@ -123,14 +123,28 @@ else
     done
     ok "Cloudflare API Key captured."
 
+    # Immich database password. PostgreSQL only reads it when it initializes
+    echo -n "Enter Immich database password (hidden): "
+    read -r -s IMMICH_DB_PASSWORD
+    echo ""
+
+    while [[ -z "${IMMICH_DB_PASSWORD// }" ]]; do
+        warn "Immich database password cannot be empty."
+        echo -n "Enter Immich database password (hidden): "
+        read -r -s IMMICH_DB_PASSWORD
+        echo ""
+    done
+    ok "Immich database password captured."
+
     # Write to data/secrets.yaml for subsequent standalone runs
     mkdir -p "${PROJECT_ROOT}/data"
     cat > "${PROJECT_ROOT}/data/secrets.yaml" <<EOF
 ---
 homelab::cloudflare_token: '${CF_KEY}'
+immich::db_password: '${IMMICH_DB_PASSWORD}'
 EOF
     chmod 660 "${PROJECT_ROOT}/data/secrets.yaml"
-    ok "Saved secret to ${PROJECT_ROOT}/data/secrets.yaml (mode 0660)."
+    ok "Saved secrets to ${PROJECT_ROOT}/data/secrets.yaml (mode 0660)."
 fi
 
 echo ""
