@@ -4,6 +4,7 @@
   String  $db_password,
   Integer $port,
   String  $upload_location,
+  Array[String] $external_libraries,
   String  $db_location,
   String  $ml_cache,
   String  $redis_location,
@@ -33,11 +34,16 @@ services:
     volumes:
       - <%= $upload_location %>:/data
       - /etc/localtime:/etc/localtime:ro
+<%- $external_libraries.each |$library| { -%>
+      - <%= $library %>:<%= $library %>:ro
+<%- } -%>
     environment:
       TZ: "<%= $timezone %>"
       DB_PASSWORD: "<%= $db_password %>"
+    # Loopback only: rootful podman opens published ports past firewalld, so binding
+    # every interface would expose plain HTTP beside nginx's TLS and the fail2ban jail.
     ports:
-      - "<%= $port %>:2283"
+      - "127.0.0.1:<%= $port %>:2283"
     depends_on:
       - redis
       - database
