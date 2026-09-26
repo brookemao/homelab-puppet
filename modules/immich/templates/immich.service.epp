@@ -3,6 +3,7 @@
   String $compose_file,
   String $install_dir,
   String $data_dir,
+  Array[String] $external_libraries,
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 [Unit]
@@ -10,8 +11,8 @@ Description=Immich photo server (podman-compose)
 Documentation=https://immich.app
 Wants=network-online.target
 After=network-online.target
-# If <%= $data_dir %> is a separate mount, don't start until it is there
-RequiresMountsFor=<%= $data_dir %>
+# If the data dir or an external library is a separate mount, don't start until it is there
+RequiresMountsFor=<%= ([$data_dir] + $external_libraries).join(' ') %>
 
 [Service]
 Type=oneshot

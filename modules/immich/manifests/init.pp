@@ -15,6 +15,11 @@
 # Its own parent must already exist (/home by default). Persistent data goes
 #   in $base_dir/data, and the SELinux rule is recursive over that - so anything placed
 #   beside it stays unreachable by the containers.
+# @param external_libraries Host directories bind-mounted read-only into the server
+#   container at the same path, for use as Immich external libraries (add each path under
+#   Administration > External Libraries). Relabelled container_ro_file_t when SELinux is
+#   managed, so they must be on a filesystem that supports labels (not NFS/CIFS), and their
+#   files must be readable by the immich uid.
 # @param cpu_limit Cores the whole stack may use. Applied to the pod podman-compose puts
 #   the containers in, so it is a collective cap, not a per-container one.
 # @param memory_limit Memory the whole stack may use, e.g. '16g'. Collective, as above.
@@ -31,6 +36,7 @@ class immich (
   Integer[1, 65535]    $port            = 2283,
   Immich::Absolutepath $install_dir     = '/opt/immich-app',
   Immich::Absolutepath $base_dir        = '/home/immich',
+  Array[Immich::Absolutepath] $external_libraries = [],
   String[1]            $user            = 'immich',
   String[1]            $group           = 'immich',
   Numeric              $cpu_limit       = 4,
@@ -93,6 +99,19 @@ class immich (
     }
   }
 
+  # External libraries are the user's own files, so only relabel them, read-only, and leave
+  # ownership and modes alone. restorecon only runs when the rule is first added; new files
+  # inherit the label from their directory.
+  if $selinux_enabled {
+    $external_libraries.each |$library| {
+      selinux::fcontext { "${library}(/.*)?":
+        seltype => 'container_ro_file_t',
+      }
+      ~> selinux::exec_restorecon { $library:
+        before => File[$compose_file],
+      }
+    }
+  }
 
   file { $base_dir:
     ensure => directory,
@@ -130,18 +149,19 @@ class immich (
     group   => $group,
     mode    => '0640',
     content => Sensitive(epp('immich/compose.yml.epp', {
-      'version'         => $version,
-      'timezone'        => $timezone,
-      'db_password'     => $db_password.unwrap,
-      'port'            => $port,
-      'upload_location' => $upload_location,
-      'db_location'     => $db_location,
-      'ml_cache'        => $ml_cache,
-      'redis_location'  => $redis_location,
-      'uid'             => $uid,
-      'gid'             => $gid,
-      'cpu_limit'       => $cpu_limit,
-      'memory_limit'    => $memory_limit,
+      'version'            => $version,
+      'timezone'           => $timezone,
+      'db_password'        => $db_password.unwrap,
+      'port'               => $port,
+      'upload_location'    => $upload_location,
+      'external_libraries' => $external_libraries,
+      'db_location'        => $db_location,
+      'ml_cache'           => $ml_cache,
+      'redis_location'     => $redis_location,
+      'uid'                => $uid,
+      'gid'                => $gid,
+      'cpu_limit'          => $cpu_limit,
+      'memory_limit'       => $memory_limit,
     })),
     require => File[$install_dir],
   }
@@ -154,10 +174,11 @@ class immich (
     group   => 'root',
     mode    => '0644',
     content => epp('immich/immich.service.epp', {
-      'compose_command' => $compose_command,
-      'compose_file'    => $compose_file,
-      'install_dir'     => $install_dir,
-      'data_dir'        => $data_dir,
+      'compose_command'    => $compose_command,
+      'compose_file'       => $compose_file,
+      'install_dir'        => $install_dir,
+      'data_dir'           => $data_dir,
+      'external_libraries' => $external_libraries,
     }),
     notify  => Exec["${service_name}-daemon-reload"],
   }
