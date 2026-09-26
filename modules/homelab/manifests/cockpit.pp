@@ -1,10 +1,10 @@
 # @summary Installs and configures Cockpit for nginx mTLS reverse proxy
 #
 # Makes Cockpit proxy-aware (Origins + ProtocolHeader per upstream wiki),
-# keeps TCP 9090 labeled cockpit_port_t, and installs a minimal SELinux
-# allow module so nginx (httpd_t) can reverse-proxy to Cockpit without the
-# broad httpd_can_network_connect boolean (and without mislabeling 9090 as
-# http_port_t, which Cockpit's own policy does not expect).
+# keeps TCP 9090 on its policy-shipped websm_port_t label, and installs a
+# minimal SELinux allow module so nginx (httpd_t) can reverse-proxy to
+# Cockpit without the broad httpd_can_network_connect boolean (and without
+# mislabeling 9090 as http_port_t, which Cockpit's policy does not expect).
 #
 # mTLS itself terminates at nginx (homelab::nginx); Cockpit never sees the
 # client certificate, so ClientCertAuthentication stays off and Cockpit login
@@ -26,15 +26,6 @@ class homelab::cockpit (
 ) {
   package { 'cockpit':
     ensure => $package_ensure,
-  }
-
-  # Provides the cockpit_port_t type and Cockpit's own policy. The 'cockpit'
-  # metapackage does not guarantee this on a minimal install; without it,
-  # `semanage port -t cockpit_port_t` fails with "Type cockpit_port_t is
-  # invalid, must be a port type".
-  package { 'cockpit-selinux':
-    ensure  => installed,
-    require => Package['cockpit'],
   }
 
   # Provides `semanage`/`semodule`/`semodule_package` for the SELinux work below.
@@ -60,27 +51,22 @@ class homelab::cockpit (
     require => Package['cockpit'],
   }
 
-  # Restore TCP 9090 to Cockpit's own type. (An earlier revision labeled it
-  # http_port_t, which Cockpit's policy does not expect and can break its
-  # bind — a mislabeled port makes cockpit.socket fail with "Input/output
-  # error" on bind, so the service below orders after this exec.)
-  # Delete-then-add is deterministic: -d drops any stale definition (e.g.
-  # http_port_t); `|| true` tolerates "not defined" / "defined in policy".
-  # The final -a runs unsilenced so real errors surface via logoutput.
+  # TCP 9090 ships in RHEL policy as websm_port_t (Cockpit's historical type
+  # name; there is no cockpit_port_t — `semanage port -l | grep 9090`
+  # confirms). A mislabeled port makes cockpit.socket fail to bind with
+  # "Input/output error", so the service below orders after this exec.
+  # The exec drops any stale local customization; if policy ever stops
+  # shipping the label, it (re)adds it. Already-correct state is a no-op.
   exec { 'selinux-cockpit-port':
-    command   => "semanage port -d -p tcp ${port} || true; semanage port -a -t cockpit_port_t -p tcp ${port}",
-    unless    => "semanage port -l | grep -E '^cockpit_port_t.*\\b${port}\\b'",
+    command   => "semanage port -d -p tcp ${port} || true; if ! semanage port -l | grep -qE '^websm_port_t.*\\b${port}\\b'; then semanage port -a -t websm_port_t -p tcp ${port} || semanage port -m -t websm_port_t -p tcp ${port}; fi",
+    unless    => "semanage port -l | grep -E '^websm_port_t.*\\b${port}\\b'",
     logoutput => on_failure,
     path      => ['/usr/sbin', '/usr/bin', '/sbin', '/bin'],
-    require   => [
-      Package['cockpit'],
-      Package['cockpit-selinux'],
-      Package['policycoreutils-python-utils'],
-    ],
+    require   => [Package['cockpit'], Package['policycoreutils-python-utils']],
   }
 
   # Least-privilege nginx -> Cockpit access: allow httpd_t name_connect to
-  # cockpit_port_t. Compiled and installed from the vendored .te source;
+  # websm_port_t. Compiled and installed from the vendored .te source;
   # bump the policy_module version in that file when the rule changes.
   file { $selinux_policy_dir:
     ensure => directory,
