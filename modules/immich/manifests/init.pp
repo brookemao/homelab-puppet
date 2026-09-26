@@ -38,7 +38,7 @@ class immich (
   Array[Immich::Absolutepath] $external_libraries = [],
   String[1]            $user            = 'immich',
   String[1]            $group           = 'immich',
-  Numeric              $cpu_limit       = 4,
+  Numeric              $cpu_limit       = 8,
   Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '16g',
   Integer[1]           $uid             = 2283,
   Integer[1]           $gid             = 2283,
