@@ -17,9 +17,8 @@
 #   beside it stays unreachable by the containers.
 # @param external_libraries Host directories bind-mounted read-only into the server
 #   container at the same path, for use as Immich external libraries (add each path under
-#   Administration > External Libraries). Relabelled container_ro_file_t when SELinux is
-#   managed, so they must be on a filesystem that supports labels (not NFS/CIFS), and their
-#   files must be readable by the immich uid.
+#   Administration > External Libraries). They must already be readable by the immich
+#   uid under a container-readable SELinux label (see homelab::parkpack).
 # @param cpu_limit Cores the whole stack may use. Applied to the pod podman-compose puts
 #   the containers in, so it is a collective cap, not a per-container one.
 # @param memory_limit Memory the whole stack may use, e.g. '16g'. Collective, as above.
@@ -96,20 +95,6 @@ class immich (
     selinux::fcontext { "${data_dir}(/.*)?":
       seltype => $selinux_type,
       before  => File[$data_dir],
-    }
-  }
-
-  # External libraries are the user's own files, so only relabel them, read-only, and leave
-  # ownership and modes alone. restorecon only runs when the rule is first added; new files
-  # inherit the label from their directory.
-  if $selinux_enabled {
-    $external_libraries.each |$library| {
-      selinux::fcontext { "${library}(/.*)?":
-        seltype => 'container_ro_file_t',
-      }
-      ~> selinux::exec_restorecon { $library:
-        before => File[$compose_file],
-      }
     }
   }
 

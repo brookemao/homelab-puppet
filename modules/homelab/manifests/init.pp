@@ -81,9 +81,13 @@ class homelab (
     require        => [Class['homelab::cockpit'], Class['homelab::ddclient'], Class['homelab::letsencrypt']],
   }
 
-  # 10. Deploy Immich. Everything else uses the class defaults; override with immich::* Hiera keys.
+  # 11. Mount the parkpack drive Immich reads as an external library
+  class { 'homelab::parkpack': }
+
+  # 12. Deploy Immich. Everything else uses the class defaults; override with immich::* Hiera keys.
   class { 'immich':
     manage_service => $manage_services,
   }
   Class['homelab::podman'] -> Class['immich']
+  Class['homelab::parkpack'] -> Class['immich']
 }
