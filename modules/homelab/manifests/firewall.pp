@@ -43,13 +43,16 @@ class homelab::firewall (
     # The nginx master runs as root but never proxies; workers run as
     # $nginx_egress_user, so the owner match catches proxied outbound sockets.
     # Loopback stays open for Cockpit (:9090) and other local backends.
+    # Match only NEW connections: without ctstate, the rule also drops
+    # ESTABLISHED reply packets (TLS Server hello, HTTP responses), which
+    # hangs every remote client after Client hello.
     firewalld_direct_rule { 'Restrict nginx workers to localhost egress (IPv4)':
       ensure        => present,
       inet_protocol => 'ipv4',
       table         => 'filter',
       chain         => 'OUTPUT',
       priority      => 0,
-      args          => "-m owner --uid-owner ${nginx_egress_user} ! --destination 127.0.0.0/8 --jump REJECT",
+      args          => "-m owner --uid-owner ${nginx_egress_user} -m conntrack --ctstate NEW ! --destination 127.0.0.0/8 --jump REJECT",
     }
 
     firewalld_direct_rule { 'Restrict nginx workers to localhost egress (IPv6)':
@@ -58,7 +61,7 @@ class homelab::firewall (
       table         => 'filter',
       chain         => 'OUTPUT',
       priority      => 0,
-      args          => "-m owner --uid-owner ${nginx_egress_user} ! --destination ::1 --jump REJECT",
+      args          => "-m owner --uid-owner ${nginx_egress_user} -m conntrack --ctstate NEW ! --destination ::1 --jump REJECT",
     }
   }
 }
