@@ -90,4 +90,12 @@ class homelab (
   }
   Class['homelab::podman'] -> Class['immich']
   Class['homelab::parkpack'] -> Class['immich']
+
+  # firewalld --reload (triggered by any permanent firewall change) flushes
+  # podman netavark/aardvark-dns runtime rules, breaking Immich
+  # inter-container DNS (EAI_AGAIN database, ML unhealthy) until the stack
+  # restarts. Refresh immich whenever firewall resources change. See
+  # docs/firewalld-podman-immich.md. fail2ban runtime bans don't reload,
+  # so they are unaffected.
+  Class['homelab::firewall'] ~> Class['immich']
 }
