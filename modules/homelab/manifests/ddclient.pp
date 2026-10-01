@@ -1,10 +1,11 @@
 # @summary Installs and configures ddclient for Dynamic DNS management
 #
-# Installs ddclient from upstream GitHub release tarball (https://github.com/ddclient/ddclient#installation)
-# using the tag resolved by the Bolt plan, ensuring perl and make are installed beforehand as packages.
+# Installs ddclient from Fedora's native repositories by default, or from an
+# upstream GitHub release tarball (https://github.com/ddclient/ddclient#installation)
+# using the tag resolved at apply time.
 #
-# @param install_method 'tarball' (builds from GitHub release tarball) or 'package' (dnf)
-# @param release_tag GitHub release tag to install (resolved by Bolt plan, e.g. 'v4.0.0')
+# @param install_method 'package' (via dnf, default) or 'tarball' (builds from GitHub release tarball)
+# @param release_tag GitHub release tag to install (tarball installs only, e.g. 'v4.0.0')
 # @param manage_service Whether to manage the ddclient systemd service
 # @param service_ensure Service target state ('running' or 'stopped')
 # @param service_enable Whether to enable ddclient at boot
@@ -13,7 +14,7 @@
 # @param cloudflare_domains Comma-separated domains to update
 # @param replace_config Whether to overwrite /etc/ddclient/ddclient.conf if it already exists
 class homelab::ddclient (
-  Enum['tarball', 'package'] $install_method    = 'tarball',
+  Enum['tarball', 'package'] $install_method    = 'package',
   String[1]                  $release_tag       = 'latest',
   Boolean                    $manage_service    = true,
   String[1]                  $service_ensure    = 'running',
@@ -23,12 +24,22 @@ class homelab::ddclient (
   String[1]                  $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca',
   Boolean                    $replace_config    = false,
 ) {
+  # The ddclient service account owns the config and cache. The RPM creates
+  # it, so in package mode the files below order after the package. Tarball
+  # installs create no account, so that path assumes one already exists.
+  if $install_method == 'package' {
+    $install_require = Package['ddclient']
+  } else {
+    $install_require = []
+  }
+
   # Common directories
   file { '/etc/ddclient':
-    ensure => directory,
-    owner  => 'ddclient',
-    group  => 'ddclient',
-    mode   => '0750',
+    ensure  => directory,
+    owner   => 'ddclient',
+    group   => 'ddclient',
+    mode    => '0750',
+    require => $install_require,
   }
 
   file { '/var/cache/ddclient':
@@ -37,6 +48,7 @@ class homelab::ddclient (
     group   => 'ddclient',
     mode    => '0755',
     recurse => true,
+    require => $install_require,
   }
 
   file { '/usr/local/src':
