@@ -1,4 +1,4 @@
-# @summary Installs and configures ddclient for Dynamic DNS management on RHEL 10
+# @summary Installs and configures ddclient for Dynamic DNS management
 #
 # Installs ddclient from upstream GitHub release tarball (https://github.com/ddclient/ddclient#installation)
 # using the tag resolved by the Bolt plan, ensuring perl and make are installed beforehand as packages.
@@ -23,8 +23,6 @@ class homelab::ddclient (
   String[1]                  $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca',
   Boolean                    $replace_config    = false,
 ) {
-  require homelab::epel
-
   # Common directories
   file { '/etc/ddclient':
     ensure => directory,
@@ -84,8 +82,7 @@ class homelab::ddclient (
     ]
 
     package { $prereq_packages:
-      ensure  => installed,
-      require => Class['homelab::epel'],
+      ensure => installed,
     }
 
     # Explicit ordering guarantees that perl and make are installed beforehand
@@ -188,8 +185,7 @@ class homelab::ddclient (
   } else {
     # Native package installation via DNF
     package { 'ddclient':
-      ensure  => installed,
-      require => Class['homelab::epel'],
+      ensure => installed,
     }
 
     $service_dependency = [

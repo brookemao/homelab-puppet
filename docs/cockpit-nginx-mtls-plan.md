@@ -55,7 +55,7 @@ proxy_set_header X-SSL-Client-DN $ssl_client_s_dn;
 ## 4. SELinux — no boolean, no http_port_t
 
 - Install `policycoreutils-python-utils` (`semanage`) and `policycoreutils` (`semodule`).
-- Keep TCP 9090 on its policy-shipped `websm_port_t` label (Cockpit's historical type name; there is no `cockpit_port_t` on RHEL — `semanage port -l | grep 9090` confirms). Drop any stale local customization; only (re)add the label if policy ever stops shipping it.
+- Keep TCP 9090 on its policy-shipped `websm_port_t` label (Cockpit's historical type name; there is no `cockpit_port_t` on Fedora — `semanage port -l | grep 9090` confirms). Drop any stale local customization; only (re)add the label if policy ever stops shipping it.
 ```bash
 semanage port -l | grep -w 9090  # expect websm_port_t; fix local overrides only
 ```

@@ -24,10 +24,10 @@ findtime = <%= $findtime %>
 # Number of failures before an IP is banned
 maxretry = <%= $maxretry %>
 
-# Use firewalld rich rules on RHEL/EL10
+# Use firewalld rich rules on Fedora
 banaction = <%= $banaction %>
 
-# In RHEL 10, sshd logs to systemd journal
+# In Fedora 44, sshd logs to systemd journal
 backend = <%= $backend %>
 
 # Whitelist localhost

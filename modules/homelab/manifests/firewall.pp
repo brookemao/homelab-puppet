@@ -1,4 +1,4 @@
-# @summary Manages firewalld and opens HTTPS in the public zone on RHEL 10
+# @summary Manages firewalld and opens HTTPS in the managed zone
 #
 # Inbound: opens $port/$protocol in $zone. Outbound: optionally confines the
 # nginx workers to localhost egress via direct OUTPUT rules, so a compromised
@@ -7,11 +7,19 @@
 # verdict is terminal and unaffected by the known nftables-backend ACCEPT-mark
 # quirks. Revisit if firewalld ever drops direct-rule support.)
 #
+# Fedora note: fresh Fedora installs default to the FedoraServer or
+# FedoraWorkstation zone, not public. $manage_default_zone pins the system
+# default zone to $zone so the port rule lands where the interfaces actually
+# are. Set $default_zone to undef to leave the system default alone (then
+# make sure $zone matches the active zone yourself).
+#
 # @param ensure Ensure state for the firewalld package (via puppet-firewalld)
 # @param manage_service Whether to enable and start the firewalld service
 # @param zone Firewalld zone to manage (default: public)
 # @param port Port to allow in the zone (default: 443)
 # @param protocol Protocol for the allowed port (default: tcp)
+# @param manage_default_zone Whether to set firewalld's default zone to $zone
+# @param default_zone Explicit default zone; defaults to $zone when undef
 # @param restrict_nginx_egress Whether to REJECT nginx worker egress outside loopback
 # @param nginx_egress_user System user the nginx workers run as (socket owner match)
 class homelab::firewall (
@@ -20,9 +28,16 @@ class homelab::firewall (
   String[1] $zone                 = 'public',
   Integer   $port                 = 443,
   String[1] $protocol             = 'tcp',
+  Boolean   $manage_default_zone  = true,
+  Optional[String[1]] $default_zone = undef,
   Boolean   $restrict_nginx_egress = true,
   String[1] $nginx_egress_user    = 'nginx',
 ) {
+  $effective_default_zone = $manage_default_zone ? {
+    true    => pick($default_zone, $zone),
+    default => undef,
+  }
+
   class { 'firewalld':
     package_ensure => $ensure,
     service_ensure => $manage_service ? {
@@ -30,6 +45,7 @@ class homelab::firewall (
       default => 'stopped',
     },
     service_enable => $manage_service,
+    default_zone   => $effective_default_zone,
   }
 
   firewalld_port { "Open port ${port} in the ${zone} zone":
