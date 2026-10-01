@@ -9,7 +9,7 @@ References:
 Current state (repo):
 - `modules/homelab/manifests/nginx.pp` proxies `cockpit.brookemao.ca` -> `127.0.0.1:9090` (mTLS), catch-all `_` default vhost, wildcard LE cert `brookemao.ca`. (Immich/photos forwarding removed — Immich stays off the internet.)
 - `modules/homelab/manifests/letsencrypt.pp` already covers `brookemao.ca` + `*.brookemao.ca` (no LE change needed).
-- `modules/homelab/manifests/firewall.pp` opens only `443/tcp` (keep `9090` closed externally).
+- `modules/homelab/manifests/firewall.pp` opens `443/tcp` plus the `cockpit` service (direct 9090 access; Fedora's stock zones omit it, unlike Rocky's).
 
 ## 1. Cockpit — new `modules/homelab/manifests/cockpit.pp`
 

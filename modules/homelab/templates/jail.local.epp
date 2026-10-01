@@ -10,6 +10,16 @@
       String  $immich_port,
       Optional[String] $immich_logpath,
       String  $immich_journalmatch,
+      Boolean $cockpit_enabled,
+      Integer $cockpit_maxretry,
+      Integer $cockpit_bantime,
+      Integer $cockpit_findtime,
+      String  $cockpit_port,
+      Boolean $cockpit_increment,
+      String  $cockpit_factor,
+      Integer $cockpit_maxtime,
+      Optional[String] $cockpit_logpath,
+      String  $cockpit_journalmatch,
 | -%>
 # /etc/fail2ban/jail.local
 # Managed by OpenVox - manual edits will be overwritten
@@ -53,5 +63,30 @@ logpath  = <%= $immich_logpath %>
 <% } else { -%>
 backend      = systemd
 journalmatch = <%= $immich_journalmatch %>
+<% } -%>
+<% } -%>
+
+<% if $cockpit_enabled { -%>
+# Cockpit failed logins: 5 failures in 10 minutes -> 1 hour ban, doubling
+# per repeat offense up to 48 hours
+[cockpit]
+enabled  = true
+port     = <%= $cockpit_port %>
+filter   = cockpit
+# Never ban localhost (also covered by [DEFAULT] ignoreip)
+ignoreip = 127.0.0.1/8 ::1
+maxretry = <%= $cockpit_maxretry %>
+bantime  = <%= $cockpit_bantime %>
+findtime = <%= $cockpit_findtime %>
+<% if $cockpit_increment { -%>
+bantime.increment = true
+bantime.factor    = <%= $cockpit_factor %>
+bantime.maxtime   = <%= $cockpit_maxtime %>
+<% } -%>
+<% if $cockpit_logpath { -%>
+logpath  = <%= $cockpit_logpath %>
+<% } else { -%>
+backend      = systemd
+journalmatch = <%= $cockpit_journalmatch %>
 <% } -%>
 <% } -%>
