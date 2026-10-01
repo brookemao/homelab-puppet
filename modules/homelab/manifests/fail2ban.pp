@@ -1,4 +1,4 @@
-# @summary Installs and configures fail2ban with firewalld integration on RHEL 10
+# @summary Installs and configures fail2ban with firewalld integration
 #
 # @param ensure Ensure state for the packages ('installed', 'latest', etc.)
 # @param manage_service Whether to enable and start the fail2ban service
@@ -32,8 +32,6 @@ class homelab::fail2ban (
   Optional[String[1]] $immich_logpath = undef,
   String[1] $immich_journalmatch = 'CONTAINER_NAME=immich-server',
 ) {
-  require homelab::epel
-
   $packages = [
     'fail2ban',
     'fail2ban-firewalld',
@@ -42,8 +40,7 @@ class homelab::fail2ban (
   ]
 
   package { $packages:
-    ensure  => $ensure,
-    require => Class['homelab::epel'],
+    ensure => $ensure,
   }
 
   if $manage_config {

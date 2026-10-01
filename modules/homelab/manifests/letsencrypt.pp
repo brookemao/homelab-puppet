@@ -7,6 +7,9 @@
 # systemd timer (twice daily); nginx is reloaded after each renewal via a
 # deploy hook.
 #
+# certbot and python3-certbot-dns-cloudflare both ship in Fedora's native
+# repos, so configure_epel stays false.
+#
 # @param cloudflare_token Cloudflare API token (DNS:Edit on the zone)
 # @param cloudflare_zone DNS zone for the certificate (cert covers apex + wildcard)
 # @param email Contact email for Let's Encrypt registration (defaults to admin@<zone>)
@@ -19,8 +22,6 @@ class homelab::letsencrypt (
   Integer              $propagation_seconds  = 30,
   Boolean              $manage_service       = true,
 ) {
-  require homelab::epel
-
   $acme_email = $email ? {
     undef   => "admin@${cloudflare_zone}",
     default => $email,
@@ -31,13 +32,11 @@ class homelab::letsencrypt (
   class { 'letsencrypt':
     email          => $acme_email,
     configure_epel => false,
-    require        => Class['homelab::epel'],
   }
 
   class { 'letsencrypt::plugin::dns_cloudflare':
     api_token           => $cloudflare_token,
     propagation_seconds => $propagation_seconds,
-    require             => Class['homelab::epel'],
   }
 
   letsencrypt::certonly { $cloudflare_zone:

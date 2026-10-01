@@ -17,6 +17,9 @@
 # @param include_local_origins Whether to append hardcoded local origins
 # @param lan_ip Static LAN IP homelab always gets (DHCP reservation)
 # @param package_ensure Ensure state for the cockpit package
+# @param extra_packages Additional Cockpit UI packages to install
+#   (container, VM, and file management)
+# @param extra_package_ensure Ensure state for the extra Cockpit UI packages
 # @param manage_service Whether to enable and start cockpit.socket
 # @param port Local TCP port Cockpit listens on
 # @param selinux_module_name Name of the custom SELinux allow module
@@ -28,6 +31,8 @@ class homelab::cockpit (
   Boolean $include_local_origins        = true,
   String[1] $lan_ip                     = '192.168.50.176',
   String[1] $package_ensure             = 'installed',
+  Array[String[1]] $extra_packages     = ['cockpit-podman', 'cockpit-machines', 'cockpit-files'],
+  String[1] $extra_package_ensure      = 'installed',
   Boolean   $manage_service             = true,
   Integer   $port                       = 9090,
   String[1] $selinux_module_name        = 'nginx_cockpit',
@@ -55,6 +60,15 @@ class homelab::cockpit (
     ensure => $package_ensure,
   }
 
+  # Extra Cockpit UIs: Podman containers, virtual machines, and file
+  # management. The base cockpit package does not pull these in, so install
+  # them explicitly (RPM dependencies pull in anything else they need,
+  # e.g. libvirt for cockpit-machines).
+  package { $extra_packages:
+    ensure  => $extra_package_ensure,
+    require => Package['cockpit'],
+  }
+
   # Provides `semanage`/`semodule` for the SELinux work below.
   package { 'policycoreutils-python-utils':
     ensure => installed,
@@ -73,7 +87,7 @@ class homelab::cockpit (
     require => Package['cockpit'],
   }
 
-  # TCP 9090 ships in RHEL policy as websm_port_t (Cockpit's historical type
+  # TCP 9090 ships in Fedora policy as websm_port_t (Cockpit's historical type
   # name; there is no cockpit_port_t — `semanage port -l | grep 9090`
   # confirms). A mislabeled port (notably http_port_t) makes cockpit.socket
   # fail to bind with "Permission denied" / "Input/output error" and a

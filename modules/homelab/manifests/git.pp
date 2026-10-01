@@ -1,4 +1,4 @@
-# @summary Installs git on RHEL 10
+# @summary Installs git
 #
 # @param ensure Ensure state for the git package ('installed', 'latest', etc.)
 class homelab::git (

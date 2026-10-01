@@ -1,20 +1,19 @@
-# Homelab OpenVox (Masterless) Configuration for RHEL 10
+# Homelab OpenVox (Masterless) Configuration for Fedora 44
 
-Standalone masterless [OpenVox](https://voxpupuli.org/openvox/) automation (`puppet apply`) to configure a baseline RHEL 10 (or Rocky Linux 10 / AlmaLinux 10 / CentOS Stream 10) system.
+Standalone masterless [OpenVox](https://voxpupuli.org/openvox/) automation (`puppet apply`) to configure a baseline Fedora 44 system.
 
-[OpenVox](https://voxpupuli.org/openvox/) is the fully open source, community-governed configuration management platform maintained by [Vox Pupuli](https://voxpupuli.org/). Because legacy configuration management packages are not distributed in standard RHEL 10 repositories, this project exclusively uses **OpenVox 8** via [Vox Pupuli's YUM repository](https://voxpupuli.org/openvox/install/). (OpenVox packages provide the drop-in CLI executable as `puppet`).
+[OpenVox](https://voxpupuli.org/openvox/) is the fully open source, community-governed configuration management platform maintained by [Vox Pupuli](https://voxpupuli.org/). This project exclusively uses **OpenVox 8** via [Vox Pupuli's YUM repository](https://voxpupuli.org/openvox/install/) (`openvox8-release-fedora-44`). (OpenVox packages provide the drop-in CLI executable as `puppet`).
 
 OpenVox maintains complete compatibility with declarative manifests and Hiera data while removing proprietary dependencies and commercial repository restrictions.
 
 ### Managed Components:
-- **EPEL 10 Repository**: Enables CodeReady Builder (CRB) and installs the EPEL 10 release package with automated metadata cache refresh.
 - **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban).
-- **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` allowed in the default `public` zone, plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich` to restart (see `docs/firewalld-podman-immich.md`).
-- **podman**: Container runtime with `podman-compose` (from EPEL) for compose workloads.
+- **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` allowed in the managed zone (`public` by default, pinned as the system default zone so the rule lands on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich` to restart (see `docs/firewalld-podman-immich.md`).
+- **podman**: Container runtime with `podman-compose` for compose workloads.
 - **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
-- **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
+- **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
@@ -31,7 +30,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 ├── environment.conf         # modulepath
 ├── manifests/site.pp        # Masterless entrypoint for `puppet apply`
 └── modules/
-    ├── homelab/             # Site profile: epel, git, fastfetch, fail2ban, firewall, podman,
+    ├── homelab/             # Site profile: git, fastfetch, fail2ban, firewall, podman,
     │                        #   ddclient, Let's Encrypt, cockpit, nginx (mTLS proxy); declares immich
     └── immich/              # Immich stack: compose.yml + systemd unit
 ```
@@ -42,8 +41,8 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 
 ### 1. Automated Bootstrap Script (Recommended)
 
-The easiest way to bootstrap and configure a fresh RHEL 10 machine is using `bootstrap/bootstrap.sh`. It automatically:
-1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-el-10.noarch.rpm`) and `openvox-agent` via DNF with sudo.
+The easiest way to bootstrap and configure a fresh Fedora 44 machine is using `bootstrap/bootstrap.sh`. It automatically:
+1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-fedora-44.noarch.rpm`) and `openvox-agent` via DNF with sudo.
 2. Securely prompts for your Cloudflare API key / token (or reads from `CLOUDFLARE_API_KEY`).
 3. Saves the token to `data/secrets.yaml` (mode `0660`, gitignored).
 4. Executes masterless apply with sudo (`sudo puppet apply`).
@@ -259,4 +258,4 @@ cat /sys/fs/cgroup/machine.slice/*libpod_pod*/memory.max
 cat /sys/fs/cgroup/machine.slice/*libpod_pod*/cpu.max
 ```
 
-Pod-level limits need cgroups v2, which RHEL 10 uses by default.
+Pod-level limits need cgroups v2, which Fedora 44 uses by default.
