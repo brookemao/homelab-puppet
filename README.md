@@ -10,13 +10,39 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban) and a Cockpit failed-login jail (5 failures in 10 min → 1 h ban, doubling per repeat offense up to 48 h).
-- **firewalld**: Firewall service managed via `puppet-firewalld` with port `443/tcp` and the `cockpit` service (9090/tcp) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich` to restart (see `docs/firewalld-podman-immich.md`).
+- **firewalld**: Firewall service managed via `puppet-firewalld` with ports `443/tcp` and `9090/tcp` (Cockpit) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich` to restart (see `docs/firewalld-podman-immich.md`).
 - **podman**: Container runtime with `podman-compose` for compose workloads.
 - **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
+
+### Known issues
+
+- **`puppet-firewalld` `firewalld_service` silently never applies (workaround in place).**
+  The provider prefetches a canned `ensure => :present` for every service definition
+  firewalld knows about (`firewall-cmd --get-services` lists *definitions*, not zone
+  membership — `cockpit.xml` ships with firewalld, so it is always "known"). The
+  resource therefore evaluates as in-sync without ever running the real zone-membership
+  check, and every apply is a silent no-op. Reproducer:
+  ```bash
+  sudo puppet resource --modulepath=modules firewalld_service "Allow cockpit in the public zone" \
+    ensure=present zone=public service=cockpit   # reports present, changes nothing
+  sudo firewall-cmd --permanent --zone=public --list-services   # cockpit absent
+  ```
+  Workaround: `homelab::firewall` allows Cockpit via `firewalld_port` (`9090/tcp`)
+  instead — behaviorally identical, since the shipped `cockpit` service is just
+  `9090/tcp`, and the port provider checks actual zone membership. An upstream fix
+  (prefetch only services actually enabled in the resource's zone, or always run
+  `exists?`) is planned.
+- **Direct-rule `--uid-owner` must be numeric.** firewalld applies direct rules
+  through the nftables `iptables-restore` compat layer, which rejects usernames
+  (`Bad value for "--uid-owner" option`), failing the whole restore and leaving
+  the rules unenforced. `homelab::firewall` therefore resolves the worker UID at
+  apply time via the `nginx_uid` custom fact. On a fresh host the nginx account
+  does not exist yet when facts resolve, so the first apply skips the egress
+  rules with a warning and the second apply enforces them.
 
 ---
 
