@@ -5,8 +5,8 @@
 #
 # @param manage_services Whether to manage and start background services (fail2ban,
 #   ddclient, certificate renewal, nginx, and the immich systemd unit)
-# @param ddclient_install_method 'tarball' (from GitHub release tarball) or 'package' (via dnf)
-# @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0'
+# @param ddclient_install_method 'package' (via dnf, default) or 'tarball' (from GitHub release tarball)
+# @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0' (tarball installs only)
 # @param cloudflare_token API token for Cloudflare DDNS
 # @param cloudflare_zone Root zone for Cloudflare DDNS
 # @param cloudflare_domains Comma-separated domains to update
@@ -41,7 +41,7 @@ class homelab (
   # 5. Install podman and podman-compose (both native on Fedora)
   class { 'homelab::podman': }
 
-  # 6. Install and configure ddclient from GitHub release tarball or package
+  # 6. Install and configure ddclient from the native DNF package or a GitHub release tarball
   class { 'homelab::ddclient':
     install_method     => $ddclient_install_method,
     release_tag        => $ddclient_release_tag,

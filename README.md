@@ -15,7 +15,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
-- **ddclient**: Dynamic DNS client built and installed directly from upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) (with `perl` and `make` installed beforehand, automatic discovery of the latest tag past 4.0.0, and systemd service integration) or via native DNF package.
+- **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 
 ---
@@ -93,7 +93,7 @@ This project uses standard Hiera 5 data lookups.
 - **`data/common.yaml`**: Contains default parameters for the system:
   ```yaml
   homelab::manage_services: true
-  homelab::ddclient_install_method: 'tarball'
+  homelab::ddclient_install_method: 'package'
   homelab::ddclient_release_tag: 'latest'
   homelab::cloudflare_zone: 'brookemao.ca'
   homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca'
@@ -123,7 +123,7 @@ This project uses standard Hiera 5 data lookups.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `manage_services` | `Boolean` | `true` | Whether to manage and enable background services (`fail2ban`, `ddclient`) |
-| `ddclient_install_method` | `String` | `'tarball'` | `'tarball'` (official GitHub release tarball) or `'package'` (dnf) |
+| `ddclient_install_method` | `String` | `'package'` | `'package'` (dnf) or `'tarball'` (official GitHub release tarball) |
 | `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag past 4.0.0) or specific tag (e.g. `'v4.0.0'`) |
 | `cloudflare_token` | `String` | `'<SECRET TOKEN HERE>'` | Cloudflare API Token for dynamic DNS updates |
 | `cloudflare_zone` | `String` | `'brookemao.ca'` | Cloudflare root domain zone |
