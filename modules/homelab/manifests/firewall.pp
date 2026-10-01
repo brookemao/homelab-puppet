@@ -20,13 +20,20 @@
 # @param protocol Protocol for the allowed port (default: tcp)
 # @param manage_default_zone Whether to set firewalld's default zone to $zone
 # @param default_zone Explicit default zone; defaults to $zone when undef
-# @param allow_cockpit Whether to allow the Cockpit service (9090/tcp) in $zone.
+# @param allow_cockpit Whether to allow Cockpit (9090/tcp) in $zone.
 #   Stock Fedora zones omit it (Rocky's public zone shipped it by default),
 #   so without this direct Cockpit access is blocked and only the nginx
-#   mTLS proxy on 443 reaches it.
-# @param cockpit_service Firewalld service name for Cockpit access
-# @param restrict_nginx_egress Whether to REJECT nginx worker egress outside loopback
-# @param nginx_egress_user System user the nginx workers run as (socket owner match)
+#   mTLS proxy on 443 reaches it. Implemented as a port rule rather than
+#   firewalld's cockpit service: puppet-firewalld's firewalld_service
+#   provider falsely reports the service as present (it enumerates known
+#   service definitions instead of zone membership), so the rule silently
+#   never applied. The shipped cockpit service is just 9090/tcp anyway.
+# @param cockpit_port Port Cockpit listens on (default: 9090)
+# @param cockpit_protocol Protocol for the Cockpit port (default: tcp)
+# @param restrict_nginx_egress Whether to REJECT nginx worker egress outside loopback.
+#   The worker UID is resolved at apply time via the nginx_uid custom fact
+#   (numeric UIDs only: the nftables iptables-restore compat layer rejects
+#   usernames in --uid-owner with 'Bad value').
 class homelab::firewall (
   String[1] $ensure               = 'installed',
   Boolean   $manage_service       = true,
@@ -36,9 +43,9 @@ class homelab::firewall (
   Boolean   $manage_default_zone  = true,
   Optional[String[1]] $default_zone = undef,
   Boolean   $allow_cockpit        = true,
-  String[1] $cockpit_service      = 'cockpit',
+  Integer   $cockpit_port         = 9090,
+  String[1] $cockpit_protocol     = 'tcp',
   Boolean   $restrict_nginx_egress = true,
-  String[1] $nginx_egress_user    = 'nginx',
 ) {
   $effective_default_zone = $manage_default_zone ? {
     true    => pick($default_zone, $zone),
@@ -63,16 +70,29 @@ class homelab::firewall (
   }
 
   if $allow_cockpit {
-    firewalld_service { "Allow ${cockpit_service} in the ${zone} zone":
-      ensure  => present,
-      zone    => $zone,
-      service => $cockpit_service,
+    firewalld_port { "Open Cockpit port ${cockpit_port} in the ${zone} zone":
+      ensure   => present,
+      zone     => $zone,
+      port     => $cockpit_port,
+      protocol => $cockpit_protocol,
     }
   }
 
-  if $restrict_nginx_egress {
-    # The nginx master runs as root but never proxies; workers run as
-    # $nginx_egress_user, so the owner match catches proxied outbound sockets.
+  # Facts resolve before the catalog applies, so on a fresh host the nginx
+  # account does not exist yet (nginx is installed later in this same run)
+  # and the fact is empty. Skipping with a loud warning beats failing the
+  # whole catalog: everything else still applies, and the next run enforces
+  # the rules once the account exists.
+  $nginx_uid = $facts['nginx_uid']
+  if $restrict_nginx_egress and $nginx_uid == undef {
+    warning('homelab::firewall: nginx user not present while compiling; skipping localhost-egress confinement for this run. Re-apply once nginx is installed to enforce it.')
+  }
+
+  if $restrict_nginx_egress and $nginx_uid != undef {
+    # The nginx master runs as root but never proxies; workers run as the
+    # nginx account, so the owner match catches proxied outbound sockets.
+    # The UID comes from the nginx_uid fact and must stay numeric (see the
+    # restrict_nginx_egress param docs): usernames are rejected outright.
     # Loopback stays open for Cockpit (:9090) and other local backends.
     # Match only NEW connections: without ctstate, the rule also drops
     # ESTABLISHED reply packets (TLS Server hello, HTTP responses), which
@@ -83,7 +103,7 @@ class homelab::firewall (
       table         => 'filter',
       chain         => 'OUTPUT',
       priority      => 0,
-      args          => "-m owner --uid-owner ${nginx_egress_user} -m conntrack --ctstate NEW ! --destination 127.0.0.0/8 --jump REJECT",
+      args          => "-m owner --uid-owner ${nginx_uid} -m conntrack --ctstate NEW ! --destination 127.0.0.0/8 --jump REJECT",
     }
 
     firewalld_direct_rule { 'Restrict nginx workers to localhost egress (IPv6)':
@@ -92,7 +112,7 @@ class homelab::firewall (
       table         => 'filter',
       chain         => 'OUTPUT',
       priority      => 0,
-      args          => "-m owner --uid-owner ${nginx_egress_user} -m conntrack --ctstate NEW ! --destination ::1 --jump REJECT",
+      args          => "-m owner --uid-owner ${nginx_uid} -m conntrack --ctstate NEW ! --destination ::1 --jump REJECT",
     }
   }
 }
