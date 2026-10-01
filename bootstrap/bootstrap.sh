@@ -40,7 +40,7 @@ else
 fi
 
 echo "============================================================"
-echo "      Homelab OpenVox Bootstrap - RHEL 10 Setup             "
+echo "      Homelab OpenVox Bootstrap - Fedora 44 Setup              "
 echo "============================================================"
 echo ""
 
@@ -54,20 +54,17 @@ if $SUDO puppet --version &>/dev/null; then
 else
     info "OpenVox not found. Installing openvox-agent via DNF with sudo..."
 
-    # Detect Enterprise Linux major version (defaulting to 10)
-    EL_VER="$(rpm -E '%{rhel}' 2>/dev/null || true)"
-    if [[ -z "${EL_VER}" || "${EL_VER}" == "%{rhel}" ]]; then
-        if [[ -f /etc/os-release ]]; then
-            EL_VER="$(grep -oP 'VERSION_ID="?\K[0-9]+' /etc/os-release | head -n1 || echo "10")"
-        else
-            EL_VER="10"
-        fi
+    # Fedora release RPMs are versioned (openvox8-release-fedora-<major>).
+    # All project packages come from native Fedora repos.
+    OS_VER="$(grep -oP '^VERSION_ID="?\K[0-9]+' /etc/os-release 2>/dev/null | head -n1 || echo "")"
+    if [[ -z "${OS_VER}" ]]; then
+        OS_VER="44"
     fi
 
-    info "Detected Enterprise Linux version: ${EL_VER}"
+    info "Detected Fedora version: ${OS_VER}"
 
     # Install the OpenVox release repository package from Vox Pupuli (https://voxpupuli.org/openvox/install/)
-    REPO_URL="https://yum.voxpupuli.org/openvox8-release-el-${EL_VER}.noarch.rpm"
+    REPO_URL="https://yum.voxpupuli.org/openvox8-release-fedora-${OS_VER}.noarch.rpm"
 
     info "Adding OpenVox repository from ${REPO_URL} with sudo..."
     if ! $SUDO dnf install -y "${REPO_URL}"; then
@@ -155,6 +152,9 @@ echo ""
 info "Step 3/4: Installing required Puppet Forge modules..."
 
 # Install into the project modules dir so `puppet apply --modulepath` resolves them.
+# (Several Forge modules omit Fedora in their metadata but branch on the
+# RedHat osfamily with identical package/service names, which puppet apply
+# does not enforce, so they apply cleanly.)
 # puppet-firewalld pulls in its dependencies (puppetlabs-stdlib, puppetlabs-augeas_core) automatically.
 # southalc-podman pulls in its dependencies (puppetlabs-stdlib, puppetlabs-concat,
 # puppetlabs-selinux_core, puppetlabs-inifile, puppet-systemd, southalc-hashfile) automatically.
