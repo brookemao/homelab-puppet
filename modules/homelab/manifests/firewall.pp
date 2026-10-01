@@ -20,6 +20,11 @@
 # @param protocol Protocol for the allowed port (default: tcp)
 # @param manage_default_zone Whether to set firewalld's default zone to $zone
 # @param default_zone Explicit default zone; defaults to $zone when undef
+# @param allow_cockpit Whether to allow the Cockpit service (9090/tcp) in $zone.
+#   Stock Fedora zones omit it (Rocky's public zone shipped it by default),
+#   so without this direct Cockpit access is blocked and only the nginx
+#   mTLS proxy on 443 reaches it.
+# @param cockpit_service Firewalld service name for Cockpit access
 # @param restrict_nginx_egress Whether to REJECT nginx worker egress outside loopback
 # @param nginx_egress_user System user the nginx workers run as (socket owner match)
 class homelab::firewall (
@@ -30,6 +35,8 @@ class homelab::firewall (
   String[1] $protocol             = 'tcp',
   Boolean   $manage_default_zone  = true,
   Optional[String[1]] $default_zone = undef,
+  Boolean   $allow_cockpit        = true,
+  String[1] $cockpit_service      = 'cockpit',
   Boolean   $restrict_nginx_egress = true,
   String[1] $nginx_egress_user    = 'nginx',
 ) {
@@ -53,6 +60,14 @@ class homelab::firewall (
     zone     => $zone,
     port     => $port,
     protocol => $protocol,
+  }
+
+  if $allow_cockpit {
+    firewalld_service { "Allow ${cockpit_service} in the ${zone} zone":
+      ensure  => present,
+      zone    => $zone,
+      service => $cockpit_service,
+    }
   }
 
   if $restrict_nginx_egress {

@@ -15,6 +15,16 @@
 # @param immich_port Ports guarded by the Immich jail (default: http,https)
 # @param immich_logpath Log file for the Immich jail (default: undef = read from systemd journal)
 # @param immich_journalmatch Journal match scoping the Immich jail to its container logs
+# @param cockpit_enabled Whether to enable the Cockpit failed-login jail
+# @param cockpit_maxretry Failed Cockpit logins before banning (default: 5)
+# @param cockpit_bantime Cockpit ban duration in seconds (default: 3600 = 1 hour)
+# @param cockpit_findtime Time window in seconds to count Cockpit failures (default: 600 = 10 min)
+# @param cockpit_port Ports guarded by the Cockpit jail (default: 9090)
+# @param cockpit_increment Whether Cockpit bans grow exponentially per repeat offense
+# @param cockpit_factor Ban-time multiplier applied on each repeat Cockpit offense
+# @param cockpit_maxtime Cap in seconds for exponential Cockpit bans (default: 172800 = 48 hours)
+# @param cockpit_logpath Log file for the Cockpit jail (default: undef = read from systemd journal)
+# @param cockpit_journalmatch Journal match scoping the Cockpit jail to cockpit-ws logs
 class homelab::fail2ban (
   String[1] $ensure         = 'installed',
   Boolean   $manage_service = true,
@@ -31,6 +41,16 @@ class homelab::fail2ban (
   String[1] $immich_port         = 'http,https',
   Optional[String[1]] $immich_logpath = undef,
   String[1] $immich_journalmatch = 'CONTAINER_NAME=immich-server',
+  Boolean   $cockpit_enabled      = true,
+  Integer   $cockpit_maxretry     = 5,
+  Integer   $cockpit_bantime      = 3600,
+  Integer   $cockpit_findtime     = 600,
+  String[1] $cockpit_port         = '9090',
+  Boolean   $cockpit_increment    = true,
+  String[1] $cockpit_factor       = '2',
+  Integer   $cockpit_maxtime      = 172800,
+  Optional[String[1]] $cockpit_logpath = undef,
+  String[1] $cockpit_journalmatch = 'SYSLOG_IDENTIFIER=cockpit-ws',
 ) {
   $packages = [
     'fail2ban',
@@ -62,6 +82,16 @@ class homelab::fail2ban (
         'immich_port'        => $immich_port,
         'immich_logpath'     => $immich_logpath,
         'immich_journalmatch' => $immich_journalmatch,
+        'cockpit_enabled'     => $cockpit_enabled,
+        'cockpit_maxretry'    => $cockpit_maxretry,
+        'cockpit_bantime'     => $cockpit_bantime,
+        'cockpit_findtime'    => $cockpit_findtime,
+        'cockpit_port'        => $cockpit_port,
+        'cockpit_increment'   => $cockpit_increment,
+        'cockpit_factor'      => $cockpit_factor,
+        'cockpit_maxtime'     => $cockpit_maxtime,
+        'cockpit_logpath'     => $cockpit_logpath,
+        'cockpit_journalmatch' => $cockpit_journalmatch,
       }),
       require => Package[$packages],
       notify  => Service['fail2ban'],
@@ -73,6 +103,16 @@ class homelab::fail2ban (
       group   => 'root',
       mode    => '0644',
       source  => 'puppet:///modules/homelab/fail2ban-immich-filter.conf',
+      require => Package[$packages],
+      notify  => Service['fail2ban'],
+    }
+
+    file { '/etc/fail2ban/filter.d/cockpit.conf':
+      ensure  => file,
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0644',
+      source  => 'puppet:///modules/homelab/fail2ban-cockpit-filter.conf',
       require => Package[$packages],
       notify  => Service['fail2ban'],
     }
