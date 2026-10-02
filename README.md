@@ -18,7 +18,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 - **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
-- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm `llama-local` image (Qwen3.8 thinking-mode preset, 196608-token context, 16 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
+- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm `llama-local` image (Qwen3.8 thinking-mode preset, 131072-token context, 16 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
 
 ### Known issues
 
@@ -425,9 +425,9 @@ Prerequisites Puppet does not provide (first apply fails loudly without them):
 
 Caveats:
 
-- **`--ctx-size 196608` is passed.** This sets the context length to 196608
-  tokens (3/4 of the 262144-token Qwen3 maximum); the KV cache uses the
-  configured q8_0 cache types.
+- **`--ctx-size 131072` is passed.** This sets the context length to 131072
+  tokens (1/2 of the 262144-token Qwen3 maximum, kept this low to avoid OOM);
+  the KV cache uses the configured q8_0 cache types.
 - **`--cache-ram 16384` is passed.** The host-RAM prompt cache is raised from
   the 8 GiB default to 16 GiB so more prompt/KV state survives in system RAM
   when handling multiple users concurrently.

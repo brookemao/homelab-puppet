@@ -10,7 +10,8 @@
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 # Mirrors homelab-llama test-llama-local.sh (Qwen3.8 thinking-mode preset,
-# ROCm GPU passthrough) with a 196608-token context (3/4 of Qwen3 256k max)
+# ROCm GPU passthrough) with a 131072-token context (1/2 of Qwen3 256k max,
+# reduced to avoid OOM)
 # and a 16 GiB host-RAM
 # prompt cache (--cache-ram, default 8 GiB) so concurrent users can reuse
 # cached prompts; --parallel is omitted so llama.cpp manages concurrent
@@ -42,7 +43,7 @@ ExecStart=<%= $podman_command %> run --rm \
   --model <%= $model_path %> \
   --host 0.0.0.0 \
   --port 8080 \
-  --ctx-size 196608 \
+  --ctx-size 131072 \
   --batch-size 2048 \
   --ubatch-size 2048 \
   --threads 8 \

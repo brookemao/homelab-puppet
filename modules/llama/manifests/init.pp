@@ -2,7 +2,7 @@
 #
 # Mirrors the homelab-llama test-llama-local.sh settings (Qwen3.8 thinking-mode
 # sampling, ROCm GPU passthrough, q8_0 KV cache, draft-mtp speculation) with a
-# 196608-token context (3/4 of Qwen3 256k max) and a 16 GiB host-RAM prompt cache (--cache-ram) so
+# 131072-token context (1/2 of Qwen3 256k max, reduced to avoid OOM) and a 16 GiB host-RAM prompt cache (--cache-ram) so
 # concurrent users can reuse cached prompts. --parallel is left to llama.cpp to
 # manage concurrent requests automatically, -kvu forces the shared (unified)
 # KV cache. --sleep-idle-seconds unloads the
