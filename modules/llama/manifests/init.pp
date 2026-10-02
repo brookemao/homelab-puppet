@@ -34,7 +34,7 @@
 # @param service_name Name of the systemd unit and of the container
 #
 class llama (
-  String[1]            $model                 = 'Qwen3.8-27B-UD-Q4_K_XL.gguf',
+  String[1]            $model                 = 'Qwen3.8-27B-UD-Q6_K.gguf',
   Llama::Absolutepath  $models_dir            = '/home/llama/models',
   Integer[1, 65535]    $port                  = 8080,
   String[1]            $image                 = 'localhost/llama-local:latest',
