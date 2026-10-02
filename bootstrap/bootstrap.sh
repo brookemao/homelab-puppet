@@ -3,7 +3,7 @@
 # bootstrap.sh - Bootstrap OpenVox (masterless) and run homelab baseline configuration
 #
 # 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
-# 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password)
+# 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password, SearXNG secret key)
 # 3. Executes masterless run with sudo (`sudo puppet apply`)
 #
 
@@ -142,6 +142,73 @@ immich::db_password: '${IMMICH_DB_PASSWORD}'
 EOF
     chmod 660 "${PROJECT_ROOT}/data/secrets.yaml"
     ok "Saved secrets to ${PROJECT_ROOT}/data/secrets.yaml (mode 0660)."
+fi
+
+# SearXNG server secret key. Resolved once here so the Hiera secrets file
+# and the deployed SearXNG settings file stay in sync. Precedence:
+# SEARXNG_SECRET_KEY environment override, then the existing
+# data/secrets.yaml value, otherwise prompt (empty input auto-generates).
+SECRETS_FILE="${PROJECT_ROOT}/data/secrets.yaml"
+SEARXNG_EXAMPLE="${PROJECT_ROOT}/searxng/settings.yml.example"
+SEARXNG_SETTINGS="${PROJECT_ROOT}/searxng/settings.yml"
+
+SEARXNG_SECRET="${SEARXNG_SECRET_KEY:-}"
+if [[ -n "${SEARXNG_SECRET// }" ]]; then
+    ok "Using SearXNG secret key from environment variable SEARXNG_SECRET_KEY."
+else
+    SEARXNG_SECRET="$(sed -n "s/^[[:space:]]*searxng::secret_key:[[:space:]]*['\"]\?\([^'\"]*\)['\"]\?[[:space:]]*$/\1/p" "${SECRETS_FILE}" 2>/dev/null | head -n 1)"
+    if [[ -n "${SEARXNG_SECRET}" ]]; then
+        ok "SearXNG secret key already present in data/secrets.yaml. Skipping prompt."
+    else
+        echo -n "Enter SearXNG secret key (hidden, empty to auto-generate): "
+        read -r -s SEARXNG_SECRET || true
+        echo ""
+
+        if [[ -z "${SEARXNG_SECRET// }" ]]; then
+            if command -v openssl &>/dev/null; then
+                SEARXNG_SECRET="$(openssl rand -hex 32)"
+            else
+                SEARXNG_SECRET="$(head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n')"
+            fi
+            ok "Generated random SearXNG secret key."
+        else
+            ok "SearXNG secret key captured."
+        fi
+    fi
+fi
+
+# YAML-escape for single-quoted scalars (a literal quote is doubled), then
+# sed-escape for the substitutions below.
+SEARXNG_SECRET_YAML="${SEARXNG_SECRET//\'/\'\'}"
+SEARXNG_SECRET_SED="$(printf '%s' "${SEARXNG_SECRET_YAML}" | sed 's/[&|\\]/\\&/g')"
+
+# Persist to the Hiera secrets file: create it, append the key, or update
+# the stored value when it differs (e.g. explicit environment override).
+mkdir -p "${PROJECT_ROOT}/data"
+SEARXNG_LINE="searxng::secret_key: '${SEARXNG_SECRET_YAML}'"
+if [[ ! -f "${SECRETS_FILE}" ]]; then
+    printf '%s\n' '---' "${SEARXNG_LINE}" > "${SECRETS_FILE}"
+    ok "Saved SearXNG secret key to ${SECRETS_FILE} (mode 0660)."
+elif ! grep -q '^[[:space:]]*searxng::secret_key:' "${SECRETS_FILE}"; then
+    printf '%s\n' "${SEARXNG_LINE}" >> "${SECRETS_FILE}"
+    ok "Saved SearXNG secret key to ${SECRETS_FILE} (mode 0660)."
+elif ! grep -qF -- "${SEARXNG_LINE}" "${SECRETS_FILE}"; then
+    sed -i "s|^[[:space:]]*searxng::secret_key:.*|searxng::secret_key: '${SEARXNG_SECRET_SED}'|" "${SECRETS_FILE}"
+    ok "Updated SearXNG secret key in ${SECRETS_FILE}."
+fi
+chmod 660 "${SECRETS_FILE}"
+
+# Render the deployed settings from the tracked example, injecting the
+# secret. A settings file the operator already customized is never
+# overwritten; the secret is never committed (settings.yml is gitignored).
+if [[ -f "${SEARXNG_EXAMPLE}" ]]; then
+    if [[ ! -f "${SEARXNG_SETTINGS}" ]] || grep -q 'replace-with-a-generated-secret' "${SEARXNG_SETTINGS}"; then
+        sed "s|replace-with-a-generated-secret|${SEARXNG_SECRET_SED}|" "${SEARXNG_EXAMPLE}" > "${SEARXNG_SETTINGS}"
+        chmod 600 "${SEARXNG_SETTINGS}"
+        ok "Rendered SearXNG settings at searxng/settings.yml (mode 0600)."
+    else
+        ok "searxng/settings.yml already customized. Leaving it untouched."
+    fi
 fi
 
 echo ""

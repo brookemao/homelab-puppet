@@ -69,7 +69,10 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 
 The easiest way to bootstrap and configure a fresh Fedora 44 machine is using `bootstrap/bootstrap.sh`. It automatically:
 1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-fedora-44.noarch.rpm`) and `openvox-agent` via DNF with sudo.
-2. Securely prompts for your Cloudflare API key / token (or reads from `CLOUDFLARE_API_KEY`).
+2. Securely prompts for secrets (Cloudflare API key/token, Immich database
+   password, SearXNG secret key) — or reads Cloudflare from `CLOUDFLARE_API_KEY`
+   and SearXNG from `SEARXNG_SECRET_KEY`. Empty SearXNG input auto-generates
+   a random key.
 3. Saves the token to `data/secrets.yaml` (mode `0660`, gitignored).
 4. Executes masterless apply with sudo (`sudo puppet apply`).
 
@@ -133,6 +136,10 @@ This project uses standard Hiera 5 data lookups.
   # Optional. Defaults to 'immich' if omitted. See "Managing Immich" below
   # before changing this on a host that has already run once.
   immich::db_password: 'your_immich_db_password_here'
+
+  # SearXNG server secret_key. Generate one with `openssl rand -hex 32`.
+  # The bootstrap script prompts for this (empty input auto-generates).
+  searxng::secret_key: 'your_searxng_secret_key_here'
   ```
   Create it from the example:
   ```bash
