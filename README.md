@@ -10,14 +10,15 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban) and a Cockpit failed-login jail (5 failures in 10 min → 1 h ban, doubling per repeat offense up to 48 h).
-- **firewalld**: Firewall service managed via `puppet-firewalld` with ports `443/tcp` and `9090/tcp` (Cockpit) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich` and `searxng` to restart (see `docs/firewalld-podman-immich.md`).
+- **firewalld**: Firewall service managed via `puppet-firewalld` with ports `443/tcp` and `9090/tcp` (Cockpit) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich`, `searxng` and `llama` to restart (see `docs/firewalld-podman-immich.md`).
 - **podman**: Container runtime with `podman-compose` for compose workloads. Container storage uses the `overlay` driver with `graphroot` relocated to `/home/containers/storage` (SELinux-labeled) instead of the `/var/lib` default.
-- **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
+- **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); `websearch.brookemao.ca` forwards to the SearXNG MCP server on loopback `8081` gated by a Bearer token; `llama.brookemao.ca` forwards to llama-server on loopback `8080` gated by HTTP Basic auth (`agentforce`); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 - **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
+- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm `llama-local` image (Qwen3.8 thinking-mode preset, context auto-sized), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
 
 ### Known issues
 
@@ -58,9 +59,10 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 ├── manifests/site.pp        # Masterless entrypoint for `puppet apply`
 └── modules/
     ├── homelab/             # Site profile: git, fastfetch, fail2ban, firewall, podman,
-    │                        #   ddclient, Let's Encrypt, cockpit, nginx (mTLS proxy); declares immich and searxng
+    │                        #   ddclient, Let's Encrypt, cockpit, nginx (mTLS proxy); declares immich, searxng, llama
     ├── immich/              # Immich stack: compose.yml + systemd unit
-    └── searxng/             # SearXNG + MCP stack: compose.yml, settings.yml + systemd unit
+    ├── searxng/             # SearXNG + MCP stack: compose.yml, settings.yml + systemd unit
+    └── llama/               # llama.cpp server: ui-config.json + systemd unit
 ```
 
 ---
@@ -72,9 +74,11 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 The easiest way to bootstrap and configure a fresh Fedora 44 machine is using `bootstrap/bootstrap.sh`. It automatically:
 1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-fedora-44.noarch.rpm`) and `openvox-agent` via DNF with sudo.
 2. Securely prompts for secrets (Cloudflare API key/token, Immich database
-   password, SearXNG secret key) — or reads Cloudflare from `CLOUDFLARE_API_KEY`
-   and SearXNG from `SEARXNG_SECRET_KEY`. Empty SearXNG input auto-generates
-   a random key.
+   password, SearXNG secret key, llama Basic-auth password) — or reads Cloudflare
+   from `CLOUDFLARE_API_KEY`, SearXNG from `SEARXNG_SECRET_KEY` and the llama
+   password from `LLAMA_BASIC_PASSWORD`. Empty SearXNG input auto-generates
+   a random key, and the MCP bearer token (`searxng::auth_token`, 32 bytes) is
+   always auto-generated unless `SEARXNG_AUTH_TOKEN` is set.
 3. Saves the token to `data/secrets.yaml` (mode `0660`, gitignored).
 4. Executes masterless apply with sudo (`sudo puppet apply`).
 
@@ -127,7 +131,7 @@ This project uses standard Hiera 5 data lookups.
   homelab::ddclient_install_method: 'package'
   homelab::ddclient_release_tag: 'latest'
   homelab::cloudflare_zone: 'brookemao.ca'
-  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca'
+  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca'
   homelab::ddclient_replace_config: false
   ```
 
@@ -142,6 +146,16 @@ This project uses standard Hiera 5 data lookups.
   # SearXNG server secret_key. Generate one with `openssl rand -hex 32`.
   # The bootstrap script prompts for this (empty input auto-generates).
   searxng::secret_key: 'your_searxng_secret_key_here'
+
+  # Bearer token for the public SearXNG MCP vhost (websearch.brookemao.ca),
+  # also injected into the MCP container and pre-registered in llama's
+  # --ui-config-file. 32 bytes, hex-encoded (`openssl rand -hex 32`).
+  # The bootstrap script generates this automatically.
+  searxng::auth_token: 'your_searxng_mcp_bearer_token_here'
+
+  # SHA-512 crypt hash of the llama Basic-auth password (user `agentforce`).
+  # The bootstrap script prompts for the password and stores only the hash.
+  llama::basic_auth_password: 'your_llama_basic_auth_password_hash_here'
   ```
   Create it from the example:
   ```bash
@@ -162,7 +176,7 @@ This project uses standard Hiera 5 data lookups.
 | `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag past 4.0.0) or specific tag (e.g. `'v4.0.0'`) |
 | `cloudflare_token` | `String` | `'<SECRET TOKEN HERE>'` | Cloudflare API Token for dynamic DNS updates |
 | `cloudflare_zone` | `String` | `'brookemao.ca'` | Cloudflare root domain zone |
-| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca'` | Subdomains to update |
+| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca'` | Subdomains to update |
 | `ddclient_replace_config` | `Boolean` | `false` | Whether to overwrite existing `/etc/ddclient/ddclient.conf` |
 
 ### `immich`
@@ -183,16 +197,40 @@ when no key is present, which is why `data/common.yaml` carries none of them.
 
 ### `searxng`
 
-Set these with `searxng::<name>` Hiera keys. Only `secret_key` is required —
-bootstrap collects it into `data/secrets.yaml`; the rest default sensibly.
+Set these with `searxng::<name>` Hiera keys. `secret_key` and `auth_token` are
+required — bootstrap collects both into `data/secrets.yaml`; the rest default
+sensibly.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `secret_key` | `Sensitive[String]` | *(required)* | SearXNG `server.secret_key`. Re-applying after a change restarts the stack via the settings subscription |
+| `auth_token` | `Sensitive[String]` | *(required)* | Bearer token for the public MCP vhost; also injected into the MCP container as `MCP_HTTP_AUTH_TOKEN`. Re-applying after a change restarts the stack and reloads nginx |
 | `version` | `String` | `'latest'` | SearXNG image tag |
 | `mcp_version` | `String` | `'latest'` | mcp-searxng image tag |
 | `port` | `Integer[1, 65535]` | `8081` | Host loopback port published for the MCP HTTP endpoint |
+| `mcp_allowed_origins` | `String` | `'https://llama.brookemao.ca'` | CORS origins the MCP server accepts — this is what lets the browser call it directly from the llama Web UI |
+| `mcp_allowed_hosts` | `String` | `"websearch.brookemao.ca,localhost,127.0.0.1,localhost:${port},127.0.0.1:${port}"` | Host values the MCP server accepts (matched exactly, port included, so the loopback port forms are needed for direct `curl` checks) |
 | `install_dir` | `Searxng::Absolutepath` | `'/opt/searxng-app'` | Holds the generated `compose.yml` and `settings.yml` |
+
+### `llama`
+
+Set these with `llama::<name>` Hiera keys. Only `searxng_bearer_token` is
+required — bootstrap collects it into `data/secrets.yaml` (as
+`searxng::auth_token`, shared with the searxng module); the rest default
+sensibly. The Basic-auth password for the public vhost lives under the
+`llama::basic_auth_password` Hiera key (SHA-512 crypt hash, collected by
+bootstrap) and is consumed by `homelab::nginx`, not this class.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `model` | `String` | `'Qwen3.8-27B-UD-Q4_K_XL.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
+| `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
+| `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
+| `image` | `String` | `'localhost/llama-local:latest'` | Must already exist in rootful podman storage (build it with [homelab-llama](https://github.com/brookemao/homelab-llama)) |
+| `reasoning_effort` | `String` | `'xhigh'` | Thinking effort passed to the chat template |
+| `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
+| `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
+| `install_dir` | `Llama::Absolutepath` | `'/opt/llama-app'` | Holds the generated `ui-config.json`, bind-mounted read-only into the container |
 
 Everything the containers persist lives under `base_dir/data` in a fixed layout, which is what
 lets a single SELinux rule and a single ownership scheme cover all of it:
@@ -230,7 +268,7 @@ zone=brookemao.ca,            \
 ttl=1,                      \
 login=token,    \
 password=<SECRET TOKEN HERE> \
-homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca
+homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca
 ```
 
 1. If you ran without supplying a token, update the secret in `/etc/ddclient/ddclient.conf`:
@@ -333,9 +371,70 @@ publishes no host port — verify it through the MCP tool: discovery and
 `/health` succeeding do not prove the JSON search path works, so make a real
 `searxng_web_search` call after (re)deploying.
 
+The same MCP server is public at `https://websearch.brookemao.ca/mcp` behind
+nginx Bearer auth (`searxng::auth_token`, checked against
+`MCP_HTTP_AUTH_TOKEN` in hardened static mode). That is the endpoint llama's
+Web UI is pre-configured to call directly. CORS preflight (`OPTIONS`, which
+carries no credentials by design) passes through nginx to the MCP server's own
+cors middleware; every data method still needs the Bearer at both layers.
+
 Caveats:
 
 - **Set `searxng::secret_key` before the first run.** The class has no default;
   without the Hiera key the catalog fails to compile. Bootstrap collects it.
 - **Re-applying after a secret change restarts the stack**, since the service
   subscribes to the generated files.
+
+---
+
+## Managing Llama
+
+Puppet writes a systemd unit at `/etc/systemd/system/llama.service` plus the
+Web UI defaults at `/opt/llama-app/ui-config.json` (mode `0600`, carries the
+MCP Bearer token), then enables the unit. The unit runs `podman run` in the
+foreground (no compose file — a single container), so logs flow straight to
+the journal.
+
+```bash
+sudo systemctl status llama       # is the server up?
+sudo systemctl restart llama      # recreate the container with new settings
+sudo journalctl -u llama          # server output
+sudo podman logs llama            # same logs via podman
+```
+
+The HTTP endpoint (Web UI, OpenAI-compatible API) listens on loopback port
+`8080` and is public at `https://llama.brookemao.ca` behind HTTP Basic auth
+(user `agentforce`; bootstrap prompts for the password and stores only its
+SHA-512 crypt hash as `llama::basic_auth_password`). The SearXNG tools show up
+as `searxng_*` in the Web UI and `GET /tools`: first-time visitors get the
+`https://websearch.brookemao.ca/mcp` server pre-registered from
+`--ui-config-file` (url + Bearer header, direct browser calls), and the MCP
+server's CORS allowlist (`MCP_HTTP_ALLOWED_ORIGINS`, set to the llama origin
+by the searxng module) is what permits those calls — llama-server itself needs
+no CORS configuration since the UI is same-origin with it. Verify search end
+to end with a chat prompt that needs fresh information — discovery and
+`/health` alone don't prove the tool path works.
+
+Prerequisites Puppet does not provide (first apply fails loudly without them):
+
+- The `localhost/llama-local:latest` image in rootful podman storage — build
+  it with [homelab-llama](https://github.com/brookemao/homelab-llama)
+  (`build-llama-local.sh`).
+- GPU devices `/dev/kfd` and `/dev/dri` on the host.
+- The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q4_K_XL.gguf`.
+
+Caveats:
+
+- **No `--ctx-size` is passed.** The context is left blank so llama.cpp sizes
+  it automatically; tune the rest of the preset via `llama::*` Hiera keys.
+- **The Bearer token is baked into the browser-side defaults.** Anyone who can
+  log in to the Web UI can read it from their own browser storage — acceptable
+  for a private, Basic-auth-gated instance, and it matches how the upstream UI
+  stores per-server headers. Rotating it means updating `searxng::auth_token`
+  (restarts the searxng stack, reloads nginx) and re-applying so llama picks
+  up the new `--ui-config-file` (restarts llama-server).
+- **llama has no dependency on the searxng stack.** The browser reaches the
+  MCP server over public HTTPS at chat time, so either side can restart
+  independently and the container needs no special egress. Puppet still
+  restarts llama on firewall changes because the published-port forwarding
+  depends on podman network rules.

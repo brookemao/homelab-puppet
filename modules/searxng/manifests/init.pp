@@ -15,9 +15,17 @@
 #
 # @param secret_key SearXNG server.secret_key. No default - provide it via the
 #   searxng::secret_key Hiera key (bootstrap collects it into data/secrets.yaml).
+# @param auth_token Bearer token nginx checks before forwarding to the MCP server
+#   (searxng::auth_token Hiera key; bootstrap generates it). The same secret is
+#   injected into the MCP container as MCP_HTTP_AUTH_TOKEN. Required - without
+#   the token nothing can authenticate to the public websearch vhost.
 # @param version SearXNG image tag.
 # @param mcp_version mcp-searxng image tag.
 # @param port Host port published for the MCP HTTP endpoint (loopback-only).
+# @param mcp_allowed_origins CORS origins the MCP server accepts (browser
+#   direct access; proxied requests are unaffected).
+# @param mcp_allowed_hosts Host values the MCP server accepts (nginx forwards
+#   Host unchanged, plus loopback for local checks).
 # @param install_dir Directory holding the generated compose.yml and settings.yml.
 # @param compose_command Absolute path to the compose implementation (systemd ExecStart needs a full path)
 # @param manage_service Whether to enable and start the searxng systemd unit
@@ -25,13 +33,19 @@
 #
 class searxng (
   Sensitive[String[1]]  $secret_key,
-  String[1]             $version         = 'latest',
-  String[1]             $mcp_version     = 'latest',
-  Integer[1, 65535]     $port            = 8081,
-  Searxng::Absolutepath $install_dir     = '/opt/searxng-app',
-  Searxng::Absolutepath $compose_command = '/usr/bin/podman-compose',
-  Boolean               $manage_service  = true,
-  String[1]             $service_name    = 'searxng',
+  Sensitive[String[1]]  $auth_token,
+  String[1]             $version            = 'latest',
+  String[1]             $mcp_version        = 'latest',
+  Integer[1, 65535]     $port               = 8081,
+  Searxng::Absolutepath $install_dir        = '/opt/searxng-app',
+  Searxng::Absolutepath $compose_command    = '/usr/bin/podman-compose',
+  Boolean               $manage_service     = true,
+  String[1]             $service_name       = 'searxng',
+  String[1]             $mcp_allowed_origins = 'https://llama.brookemao.ca',
+  # The MCP server matches Host exactly, port included: nginx forwards it
+  # portless, but direct loopback checks send 127.0.0.1:$port, so both forms
+  # are listed.
+  String[1]             $mcp_allowed_hosts   = "websearch.brookemao.ca,localhost,127.0.0.1,localhost:${port},127.0.0.1:${port}",
 ) {
   # Install directory: root-owned so only root can reach the secret-bearing settings file
   file { $install_dir:
@@ -48,13 +62,16 @@ class searxng (
     ensure  => file,
     owner   => 'root',
     group   => 'root',
-    mode    => '0644',
-    content => epp('searxng/compose.yml.epp', {
+    mode    => '0600',
+    content => Sensitive(epp('searxng/compose.yml.epp', {
       'version'       => $version,
       'mcp_version'   => $mcp_version,
       'port'          => $port,
       'settings_file' => $settings_file,
-    }),
+      'auth_token'    => $auth_token.unwrap,
+      'allowed_origins' => $mcp_allowed_origins,
+      'allowed_hosts'   => $mcp_allowed_hosts,
+    })),
     require => File[$install_dir],
   }
 

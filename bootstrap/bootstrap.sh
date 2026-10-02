@@ -3,7 +3,8 @@
 # bootstrap.sh - Bootstrap OpenVox (masterless) and run homelab baseline configuration
 #
 # 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
-# 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password, SearXNG secret key)
+# 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password,
+#    SearXNG secret key, SearXNG MCP bearer token, llama Basic-auth password)
 # 3. Executes masterless run with sudo (`sudo puppet apply`)
 #
 
@@ -106,7 +107,7 @@ else
     echo "------------------------------------------------------------"
     echo " Cloudflare Dynamic DNS Configuration for ddclient          "
     echo " Target zone:    brookemao.ca                               "
-    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca, photos.brookemao.ca, cockpit.brookemao.ca"
+    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca, photos.brookemao.ca, cockpit.brookemao.ca, llama.brookemao.ca, websearch.brookemao.ca"
     echo "------------------------------------------------------------"
     echo -n "Enter Cloudflare API Key / Token (hidden): "
     read -r -s CF_KEY
@@ -150,11 +151,45 @@ fi
 # data/secrets.yaml value, otherwise prompt (empty input auto-generates).
 SECRETS_FILE="${PROJECT_ROOT}/data/secrets.yaml"
 
+# upsert_secret_line <key> <value>: create data/secrets.yaml holding the key,
+# append the key, or update the stored value when it differs (e.g. explicit
+# environment override). Values are written as single-quoted YAML scalars,
+# so embedded quotes are doubled and sed metacharacters escaped.
+upsert_secret_line() {
+    local key="$1"
+    local value="$2"
+    local value_yaml="${value//\'/\'\'}"
+    local value_sed
+    value_sed="$(printf '%s' "${value_yaml}" | sed 's/[&|\\]/\\&/g')"
+    local line="${key}: '${value_yaml}'"
+
+    mkdir -p "${PROJECT_ROOT}/data"
+    if [[ ! -f "${SECRETS_FILE}" ]]; then
+        printf '%s\n' '---' "${line}" > "${SECRETS_FILE}"
+        ok "Saved ${key} to ${SECRETS_FILE} (mode 0660)."
+    elif ! grep -q "^[[:space:]]*${key}:" "${SECRETS_FILE}"; then
+        printf '%s\n' "${line}" >> "${SECRETS_FILE}"
+        ok "Saved ${key} to ${SECRETS_FILE} (mode 0660)."
+    elif ! grep -qF -- "${line}" "${SECRETS_FILE}"; then
+        sed -i "s|^[[:space:]]*${key}:.*|${key}: '${value_sed}'|" "${SECRETS_FILE}"
+        ok "Updated ${key} in ${SECRETS_FILE}."
+    fi
+    chmod 660 "${SECRETS_FILE}"
+}
+
+# read_secret <key>: print the current data/secrets.yaml value for a key
+# (without surrounding quotes), or nothing when the key is absent. Never
+# fails: with `set -e -o pipefail` a missing file would otherwise abort the
+# whole script from inside the $(...) assignment.
+read_secret() {
+    sed -n "s/^[[:space:]]*$1:[[:space:]]*['\"]\?\([^'\"]*\)['\"]\?[[:space:]]*$/\1/p" "${SECRETS_FILE}" 2>/dev/null | head -n 1 || true
+}
+
 SEARXNG_SECRET="${SEARXNG_SECRET_KEY:-}"
 if [[ -n "${SEARXNG_SECRET// }" ]]; then
     ok "Using SearXNG secret key from environment variable SEARXNG_SECRET_KEY."
 else
-    SEARXNG_SECRET="$(sed -n "s/^[[:space:]]*searxng::secret_key:[[:space:]]*['\"]\?\([^'\"]*\)['\"]\?[[:space:]]*$/\1/p" "${SECRETS_FILE}" 2>/dev/null | head -n 1)"
+    SEARXNG_SECRET="$(read_secret 'searxng::secret_key')"
     if [[ -n "${SEARXNG_SECRET}" ]]; then
         ok "SearXNG secret key already present in data/secrets.yaml. Skipping prompt."
     else
@@ -175,26 +210,74 @@ else
     fi
 fi
 
-# YAML-escape for single-quoted scalars (a literal quote is doubled), then
-# sed-escape for the substitutions below.
-SEARXNG_SECRET_YAML="${SEARXNG_SECRET//\'/\'\'}"
-SEARXNG_SECRET_SED="$(printf '%s' "${SEARXNG_SECRET_YAML}" | sed 's/[&|\\]/\\&/g')"
+# Persist the SearXNG server secret: create the file, append the key, or
+# update the stored value when it differs (e.g. environment override).
+upsert_secret_line 'searxng::secret_key' "${SEARXNG_SECRET}"
+unset SEARXNG_SECRET
 
-# Persist to the Hiera secrets file: create it, append the key, or update
-# the stored value when it differs (e.g. explicit environment override).
-mkdir -p "${PROJECT_ROOT}/data"
-SEARXNG_LINE="searxng::secret_key: '${SEARXNG_SECRET_YAML}'"
-if [[ ! -f "${SECRETS_FILE}" ]]; then
-    printf '%s\n' '---' "${SEARXNG_LINE}" > "${SECRETS_FILE}"
-    ok "Saved SearXNG secret key to ${SECRETS_FILE} (mode 0660)."
-elif ! grep -q '^[[:space:]]*searxng::secret_key:' "${SECRETS_FILE}"; then
-    printf '%s\n' "${SEARXNG_LINE}" >> "${SECRETS_FILE}"
-    ok "Saved SearXNG secret key to ${SECRETS_FILE} (mode 0660)."
-elif ! grep -qF -- "${SEARXNG_LINE}" "${SECRETS_FILE}"; then
-    sed -i "s|^[[:space:]]*searxng::secret_key:.*|searxng::secret_key: '${SEARXNG_SECRET_SED}'|" "${SECRETS_FILE}"
-    ok "Updated SearXNG secret key in ${SECRETS_FILE}."
+# Bearer token guarding the public SearXNG MCP vhost
+# (websearch.brookemao.ca). The same 32 bytes are injected into the MCP
+# container as MCP_HTTP_AUTH_TOKEN and pre-registered in llama's
+# --ui-config-file. Precedence: SEARXNG_AUTH_TOKEN environment override,
+# then the existing data/secrets.yaml value, otherwise generate. Hex keeps
+# it safe for HTTP headers and YAML alike.
+BEARER_TOKEN="${SEARXNG_AUTH_TOKEN:-}"
+if [[ -n "${BEARER_TOKEN// }" ]]; then
+    ok "Using SearXNG MCP bearer token from environment variable SEARXNG_AUTH_TOKEN."
+else
+    BEARER_TOKEN="$(read_secret 'searxng::auth_token')"
+    if [[ -n "${BEARER_TOKEN}" ]]; then
+        ok "SearXNG MCP bearer token already present in data/secrets.yaml. Skipping generation."
+    else
+        if command -v openssl &>/dev/null; then
+            BEARER_TOKEN="$(openssl rand -hex 32)"
+        else
+            BEARER_TOKEN="$(head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n')"
+        fi
+        ok "Generated random SearXNG MCP bearer token (32 bytes)."
+    fi
 fi
-chmod 660 "${SECRETS_FILE}"
+
+upsert_secret_line 'searxng::auth_token' "${BEARER_TOKEN}"
+unset BEARER_TOKEN
+
+# Password for the llama Basic-auth user (agentforce) on
+# llama.brookemao.ca. Only the SHA-512 crypt hash is stored, so the plaintext
+# never touches disk. Precedence: LLAMA_BASIC_PASSWORD environment override
+# (plaintext, hashed below), then the existing data/secrets.yaml hash,
+# otherwise prompt (empty input is rejected).
+LLAMA_BASIC_HASH="$(read_secret 'llama::basic_auth_password')"
+if [[ -n "${LLAMA_BASIC_HASH}" && -z "${LLAMA_BASIC_PASSWORD:-}" ]]; then
+    ok "llama Basic-auth password hash already present in data/secrets.yaml. Skipping prompt."
+else
+    LLAMA_BASIC_PLAINTEXT="${LLAMA_BASIC_PASSWORD:-}"
+    if [[ -n "${LLAMA_BASIC_PLAINTEXT// }" ]]; then
+        ok "Using llama Basic-auth password from environment variable LLAMA_BASIC_PASSWORD."
+    else
+        echo -n "Enter llama Basic-auth password for user 'agentforce' (hidden): "
+        read -r -s LLAMA_BASIC_PLAINTEXT || true
+        echo ""
+
+        while [[ -z "${LLAMA_BASIC_PLAINTEXT// }" ]]; do
+            warn "llama Basic-auth password cannot be empty."
+            echo -n "Enter llama Basic-auth password for user 'agentforce' (hidden): "
+            read -r -s LLAMA_BASIC_PLAINTEXT || true
+            echo ""
+        done
+        ok "llama Basic-auth password captured."
+    fi
+
+    if ! command -v openssl &>/dev/null; then
+        err "openssl is required to hash the llama Basic-auth password."
+        exit 1
+    fi
+    LLAMA_BASIC_HASH="$(printf '%s' "${LLAMA_BASIC_PLAINTEXT}" | openssl passwd -6 -stdin)"
+    unset LLAMA_BASIC_PLAINTEXT LLAMA_BASIC_PASSWORD
+    ok "Hashed llama Basic-auth password (SHA-512 crypt)."
+fi
+
+upsert_secret_line 'llama::basic_auth_password' "${LLAMA_BASIC_HASH}"
+unset LLAMA_BASIC_HASH
 
 echo ""
 
