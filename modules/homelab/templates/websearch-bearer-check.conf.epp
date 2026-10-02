@@ -1,0 +1,8 @@
+# Managed by Puppet. Local changes will be overwritten.
+# Included into the websearch server block's default location by
+# homelab::nginx. Carries no secret (the token lives in the 0600 map file),
+# so this file is world-readable. Checking a map variable with `if` is safe
+# per the nginx wiki.
+if ($websearch_authorized = 0) {
+  return 401;
+}

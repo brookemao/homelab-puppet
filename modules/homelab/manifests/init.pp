@@ -18,7 +18,7 @@ class homelab (
   String[1] $ddclient_release_tag    = 'latest',
   String[1] $cloudflare_token        = '<SECRET TOKEN HERE>',
   String[1] $cloudflare_zone         = 'brookemao.ca',
-  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca',
+  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca',
   Boolean   $ddclient_replace_config = false,
   Optional[String[1]] $acme_email    = undef,
 ) {
@@ -68,10 +68,20 @@ class homelab (
   }
 
   # 9. Install nginx as a TLS-terminating reverse proxy (needs the certificate and Cockpit first)
+  # The websearch/llama vhosts share secrets with the searxng and llama
+  # modules (searxng::auth_token for bearer, llama::basic_auth_password for
+  # the htpasswd file). Those keys live in other modules' namespaces, so
+  # homelab::nginx cannot pick them up by automatic parameter lookup;
+  # resolve them explicitly here. Module-level lookup_options convert both
+  # to Sensitive.
+  $searxng_auth_token = lookup('searxng::auth_token', Sensitive[String[1]], 'first')
+  $llama_basic_password = lookup('llama::basic_auth_password', Sensitive[String[1]], 'first')
   class { 'homelab::nginx':
-    cert_name      => $cloudflare_zone,
-    manage_service => $manage_services,
-    require        => [Class['homelab::cockpit'], Class['homelab::ddclient'], Class['homelab::letsencrypt']],
+    cert_name             => $cloudflare_zone,
+    manage_service        => $manage_services,
+    websearch_auth_token  => $searxng_auth_token,
+    llama_basic_password  => $llama_basic_password,
+    require               => [Class['homelab::cockpit'], Class['homelab::ddclient'], Class['homelab::letsencrypt']],
   }
 
   # 10. Mount the parkpack drive Immich reads as an external library
@@ -92,12 +102,27 @@ class homelab (
   }
   Class['homelab::podman'] -> Class['searxng']
 
+  # 13. Run llama.cpp llama-server with SearXNG MCP web search. Needs the
+  # prebuilt localhost/llama-local image, GPU devices and a model file (see
+  # homelab-llama). Search reaches the MCP server over HTTPS at
+  # websearch.brookemao.ca (pre-registered in --ui-config-file), so the
+  # container has no dependency on the searxng stack. The Bearer token is the
+  # same searxng::auth_token secret the websearch vhost checks.
+  # Override with llama::* Hiera keys.
+  class { 'llama':
+    manage_service       => $manage_services,
+    searxng_bearer_token => $searxng_auth_token,
+  }
+  Class['homelab::podman'] -> Class['llama']
+
   # firewalld --reload (triggered by any permanent firewall change) flushes
   # podman netavark/aardvark-dns runtime rules, breaking inter-container DNS
   # (Immich: EAI_AGAIN database, ML unhealthy; SearXNG: mcp-searxng cannot
-  # resolve searxng) until the stacks restart. Refresh both whenever firewall
-  # resources change. See docs/firewalld-podman-immich.md. fail2ban runtime
-  # bans don't reload, so they are unaffected.
+  # resolve searxng) and published-port forwarding until the stacks restart.
+  # Refresh all of them whenever firewall resources change.
+  # See docs/firewalld-podman-immich.md. fail2ban runtime bans don't reload,
+  # so they are unaffected.
   Class['homelab::firewall'] ~> Class['immich']
   Class['homelab::firewall'] ~> Class['searxng']
+  Class['homelab::firewall'] ~> Class['llama']
 }

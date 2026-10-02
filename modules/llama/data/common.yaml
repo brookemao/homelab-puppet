@@ -3,7 +3,7 @@
 # this, setting these keys in data/secrets.yaml fails the catalog with a type
 # mismatch against Sensitive[String[1]].
 lookup_options:
-  searxng::secret_key:
+  llama::searxng_bearer_token:
     convert_to: "Sensitive"
-  searxng::auth_token:
+  llama::basic_auth_password:
     convert_to: "Sensitive"

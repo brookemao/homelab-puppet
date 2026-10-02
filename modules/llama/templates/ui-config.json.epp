@@ -1,0 +1,7 @@
+<%- |
+  String[1] $searxng_mcp_url,
+  Sensitive[String[1]] $searxng_bearer_token,
+| -%>
+{
+  "mcpServers": "[{\"id\":\"searxng\",\"name\":\"searxng\",\"url\":\"<%= $searxng_mcp_url %>\",\"enabled\":true,\"useProxy\":false,\"headers\":\"{\\\"Authorization\\\":\\\"Bearer <%= $searxng_bearer_token.unwrap %>\\\"}\"}]"
+}

@@ -1,0 +1,21 @@
+<%- |
+  Sensitive[String[1]] $bearer_token,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+# Lives in conf.d, which nginx.conf includes inside http {} -- a map block is
+# only valid there, not inside a location. This file carries the token, so it
+# is mode 0600 root:nginx (the master reads config as root); the vhost file
+# stays world-readable.
+#
+# The key combines method and credentials. CORS preflight (OPTIONS) carries no
+# Authorization header by design, so it passes straight to the MCP server,
+# whose cors middleware answers it. Every data method needs the exact Bearer,
+# which the MCP server re-checks itself in hardened mode. Exact keys only, so
+# any token characters are safe and unknown methods fail closed.
+map "$request_method:$http_authorization" $websearch_authorized {
+  default 0;
+  "OPTIONS:" 1;
+  "POST:Bearer <%= $bearer_token.unwrap %>" 1;
+  "GET:Bearer <%= $bearer_token.unwrap %>" 1;
+  "DELETE:Bearer <%= $bearer_token.unwrap %>" 1;
+}

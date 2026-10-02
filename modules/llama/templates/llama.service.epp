@@ -1,0 +1,67 @@
+<%- |
+  String  $podman_command,
+  String  $container_name,
+  Integer $port,
+  String  $models_dir,
+  String  $model_path,
+  String  $ui_config,
+  String  $image,
+  String  $reasoning_effort,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+# Mirrors homelab-llama test-llama-local.sh (Qwen3.8 thinking-mode preset,
+# ROCm GPU passthrough) except --ctx-size is omitted so llama.cpp sizes the
+# context automatically. Web search comes from the SearXNG MCP server over
+# public HTTPS: --ui-config-file pre-registers it (url + Bearer header) for
+# first-time visitors, and the browser calls it directly -- no CORS proxy,
+# no container network to the searxng stack.
+[Unit]
+Description=llama.cpp server with SearXNG MCP web search (podman)
+Documentation=https://github.com/ggml-org/llama.cpp
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=<%= $podman_command %> run --rm \
+  --name=<%= $container_name %> \
+  --device=/dev/kfd \
+  --device=/dev/dri \
+  --group-add=video \
+  --ipc=host \
+  -e LD_LIBRARY_PATH=/opt/rocm/lib \
+  -p 127.0.0.1:<%= $port %>:8080 \
+  -v <%= $models_dir %>:<%= $models_dir %>:ro \
+  -v <%= $ui_config %>:<%= $ui_config %>:ro,Z \
+  <%= $image %> \
+  --model <%= $model_path %> \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --batch-size 2048 \
+  --ubatch-size 2048 \
+  --threads 8 \
+  --threads-batch 8 \
+  --gpu-layers 999 \
+  --split-mode none \
+  --load-mode none \
+  --parallel 4 \
+  --flash-attn on \
+  --cache-type-k q8_0 \
+  --cache-type-v q8_0 \
+  --spec-type draft-mtp \
+  --spec-draft-n-max 3 \
+  --temp 1.0 \
+  --top-p 0.95 \
+  --top-k 20 \
+  --min-p 0.0 \
+  --presence-penalty 0.0 \
+  --repeat-penalty 1.0 \
+  --chat-template-kwargs '{"reasoning_effort":"<%= $reasoning_effort %>"}' \
+  --ui-config-file <%= $ui_config %>
+ExecStop=<%= $podman_command %> stop -t 30 <%= $container_name %>
+Restart=always
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

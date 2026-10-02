@@ -4,7 +4,7 @@ homelab::manage_services: true
 homelab::ddclient_install_method: 'package'
 homelab::ddclient_release_tag: 'latest'
 homelab::cloudflare_zone: 'brookemao.ca'
-homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca'
+homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca'
 homelab::ddclient_replace_config: false
 
 # Mounted read-only into the Immich server; add under Administration > External Libraries
