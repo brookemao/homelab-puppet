@@ -6,6 +6,9 @@
 # deprecated path, but rich rules/policies cannot match on UID; a REJECT
 # verdict is terminal and unaffected by the known nftables-backend ACCEPT-mark
 # quirks. Revisit if firewalld ever drops direct-rule support.)
+# A DNAT carve-out precedes the REJECT: locally-published container ports are
+# rewritten to container IPs before filter OUTPUT runs, defeating a plain
+# loopback exemption; matching conntrack DNAT status re-allows just those.
 #
 # Fedora note: fresh Fedora installs default to the FedoraServer or
 # FedoraWorkstation zone, not public. $manage_default_zone pins the system
@@ -97,6 +100,33 @@ class homelab::firewall (
     # Match only NEW connections: without ctstate, the rule also drops
     # ESTABLISHED reply packets (TLS Server hello, HTTP responses), which
     # hangs every remote client after Client hello.
+    #
+    # DNAT carve-out (must sort before the REJECTs): connections to
+    # locally-published container ports (llama :8080, MCP :8081, ...) are
+    # DNAT-rewritten to the container IP in nat OUTPUT, which runs before
+    # filter OUTPUT -- so by the time the rules below see them, the
+    # destination is 10.88.x.x, not 127/8, and the loopback exemption never
+    # matches. Matching conntrack DNAT status keeps this narrow: only
+    # connections the host itself redirected (podman port forwards) are
+    # accepted, direct egress still hits the REJECT.
+    firewalld_direct_rule { 'Allow nginx workers to reach DNAT container ports (IPv4)':
+      ensure        => present,
+      inet_protocol => 'ipv4',
+      table         => 'filter',
+      chain         => 'OUTPUT',
+      priority      => -10,
+      args          => "-m owner --uid-owner ${nginx_uid} -m conntrack --ctstate NEW --ctstatus DNAT -j ACCEPT",
+    }
+
+    firewalld_direct_rule { 'Allow nginx workers to reach DNAT container ports (IPv6)':
+      ensure        => present,
+      inet_protocol => 'ipv6',
+      table         => 'filter',
+      chain         => 'OUTPUT',
+      priority      => -10,
+      args          => "-m owner --uid-owner ${nginx_uid} -m conntrack --ctstate NEW --ctstatus DNAT -j ACCEPT",
+    }
+
     firewalld_direct_rule { 'Restrict nginx workers to localhost egress (IPv4)':
       ensure        => present,
       inet_protocol => 'ipv4',
