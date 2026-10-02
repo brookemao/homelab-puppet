@@ -1,7 +1,7 @@
 # @summary Homelab baseline configuration for Fedora 44
 #
 # Sets up git, fastfetch, firewalld, fail2ban, podman, ddclient, TLS,
-# Cockpit, nginx, and Immich from native Fedora repositories
+# Cockpit, nginx, Immich, and SearXNG from native Fedora repositories
 #
 # @param manage_services Whether to manage and start background services (fail2ban,
 #   ddclient, certificate renewal, nginx, and the immich systemd unit)
@@ -84,11 +84,20 @@ class homelab (
   Class['homelab::podman'] -> Class['immich']
   Class['homelab::parkpack'] -> Class['immich']
 
+  # 12. Deploy SearXNG + mcp-searxng. The MCP endpoint listens on loopback port
+  # 8081; SearXNG itself stays on the container network. Override with
+  # searxng::* Hiera keys (the secret comes from searxng::secret_key).
+  class { 'searxng':
+    manage_service => $manage_services,
+  }
+  Class['homelab::podman'] -> Class['searxng']
+
   # firewalld --reload (triggered by any permanent firewall change) flushes
-  # podman netavark/aardvark-dns runtime rules, breaking Immich
-  # inter-container DNS (EAI_AGAIN database, ML unhealthy) until the stack
-  # restarts. Refresh immich whenever firewall resources change. See
-  # docs/firewalld-podman-immich.md. fail2ban runtime bans don't reload,
-  # so they are unaffected.
+  # podman netavark/aardvark-dns runtime rules, breaking inter-container DNS
+  # (Immich: EAI_AGAIN database, ML unhealthy; SearXNG: mcp-searxng cannot
+  # resolve searxng) until the stacks restart. Refresh both whenever firewall
+  # resources change. See docs/firewalld-podman-immich.md. fail2ban runtime
+  # bans don't reload, so they are unaffected.
   Class['homelab::firewall'] ~> Class['immich']
+  Class['homelab::firewall'] ~> Class['searxng']
 }

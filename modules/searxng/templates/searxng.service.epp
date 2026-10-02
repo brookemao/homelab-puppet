@@ -1,0 +1,24 @@
+<%- |
+  String $compose_command,
+  String $compose_file,
+  String $install_dir,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+[Unit]
+Description=SearXNG search engine and MCP server (podman-compose)
+Documentation=https://docs.searxng.org
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=<%= $install_dir %>
+ExecStart=<%= $compose_command %> -f <%= $compose_file %> up -d --remove-orphans
+ExecStop=<%= $compose_command %> -f <%= $compose_file %> down
+# First start pulls the images
+TimeoutStartSec=600
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

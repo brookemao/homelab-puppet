@@ -144,13 +144,11 @@ EOF
     ok "Saved secrets to ${PROJECT_ROOT}/data/secrets.yaml (mode 0660)."
 fi
 
-# SearXNG server secret key. Resolved once here so the Hiera secrets file
-# and the deployed SearXNG settings file stay in sync. Precedence:
+# Ensure data/secrets.yaml carries the SearXNG server secret Puppet needs
+# (searxng::secret_key, consumed by the searxng class). Precedence:
 # SEARXNG_SECRET_KEY environment override, then the existing
 # data/secrets.yaml value, otherwise prompt (empty input auto-generates).
 SECRETS_FILE="${PROJECT_ROOT}/data/secrets.yaml"
-SEARXNG_EXAMPLE="${PROJECT_ROOT}/searxng/settings.yml.example"
-SEARXNG_SETTINGS="${PROJECT_ROOT}/searxng/settings.yml"
 
 SEARXNG_SECRET="${SEARXNG_SECRET_KEY:-}"
 if [[ -n "${SEARXNG_SECRET// }" ]]; then
@@ -197,19 +195,6 @@ elif ! grep -qF -- "${SEARXNG_LINE}" "${SECRETS_FILE}"; then
     ok "Updated SearXNG secret key in ${SECRETS_FILE}."
 fi
 chmod 660 "${SECRETS_FILE}"
-
-# Render the deployed settings from the tracked example, injecting the
-# secret. A settings file the operator already customized is never
-# overwritten; the secret is never committed (settings.yml is gitignored).
-if [[ -f "${SEARXNG_EXAMPLE}" ]]; then
-    if [[ ! -f "${SEARXNG_SETTINGS}" ]] || grep -q 'replace-with-a-generated-secret' "${SEARXNG_SETTINGS}"; then
-        sed "s|replace-with-a-generated-secret|${SEARXNG_SECRET_SED}|" "${SEARXNG_EXAMPLE}" > "${SEARXNG_SETTINGS}"
-        chmod 600 "${SEARXNG_SETTINGS}"
-        ok "Rendered SearXNG settings at searxng/settings.yml (mode 0600)."
-    else
-        ok "searxng/settings.yml already customized. Leaving it untouched."
-    fi
-fi
 
 echo ""
 
