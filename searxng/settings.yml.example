@@ -1,0 +1,32 @@
+# Example SearXNG overlay for the podman-compose stack in this directory.
+# Tracked in git. The real settings.yml (gitignored) is rendered from this
+# file by bootstrap/bootstrap.sh, which injects the SearXNG secret collected
+# into data/secrets.yaml (`searxng::secret_key`).
+# Manual alternative:
+#   cp settings.yml.example settings.yml
+#   # then replace replace-with-a-generated-secret below (openssl rand -hex 32)
+# Rotating the secret means updating both data/secrets.yaml and
+# searxng/settings.yml, then recreating the containers:
+#   podman-compose up -d --force-recreate searxng
+#
+# Why this file exists: SearXNG's defaults serve only `html`. mcp-searxng uses
+# `format=json` as its primary search path, so `json` must be listed here.
+# `use_default_settings: true` keeps the overlay small and inherits upstream
+# defaults for everything else.
+use_default_settings: true
+
+search:
+  safe_search: 1
+  default_lang: en
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: replace-with-a-generated-secret
+  limiter: true
+  image_proxy: true
+
+valkey:
+  # `valkey` is the container-network hostname of the valkey service in compose.yml.
+  url: valkey://valkey:6379/0

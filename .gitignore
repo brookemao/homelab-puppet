@@ -1,6 +1,10 @@
 # Secrets
 data/secrets.yaml
 
+# Generated SearXNG settings holding the real secret
+# (rendered by bootstrap/bootstrap.sh from searxng/settings.yml.example)
+searxng/settings.yml
+
 # OpenVox cache and runtime directories
 .resource_types/
 .modules/

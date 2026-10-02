@@ -1,0 +1,72 @@
+# SearXNG + mcp-searxng stack for podman-compose.
+#
+# Sources:
+# - https://github.com/searxng/searxng/blob/master/container/docker-compose.yml
+# - https://github.com/ihor-sokoliuk/mcp-searxng#installation
+#   (HTTP transport: MCP_HTTP_PORT/MCP_HTTP_HOST; hardened mode is opt-in)
+#
+# Usage (run from the directory containing this file):
+#   1. Render settings.yml (holds the real secret, gitignored) from the
+#      tracked settings.yml.example — bootstrap/bootstrap.sh does this
+#      automatically when it collects the SearXNG secret; or manually:
+#        cp settings.yml.example settings.yml
+#        # then replace replace-with-a-generated-secret (openssl rand -hex 32)
+#   2. podman-compose up -d
+#   3. Verify the MCP endpoint (SearXNG itself is NOT published):
+#        curl --fail --max-time 5 http://127.0.0.1:8081/health
+#
+# Networking: only the MCP server is published to the host, on 127.0.0.1:8081.
+# searxng and valkey have no `ports:` so they are reachable only inside the
+# container network (MCP reaches SearXNG at http://searxng:8080).
+# To expose the MCP server to the LAN, change the publish to "8081:3000" and
+# enable hardened mode (MCP_HTTP_HARDEN=true with MCP_HTTP_AUTH_TOKEN and an
+# explicit MCP_HTTP_ALLOWED_ORIGINS) -- see the commented block below.
+name: searxng
+
+services:
+  searxng:
+    container_name: searxng
+    image: docker.io/searxng/searxng:latest
+    restart: always
+    # No ports: internal to the container network only.
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro,Z
+      - searxng-cache:/var/cache/searxng/
+    depends_on:
+      - valkey
+
+  valkey:
+    container_name: searxng-valkey
+    image: docker.io/valkey/valkey:9-alpine
+    command: valkey-server --save 30 1 --loglevel warning
+    restart: always
+    # No ports: internal to the container network only.
+    volumes:
+      - valkey-data:/data/
+
+  mcp-searxng:
+    container_name: searxng-mcp
+    image: isokoliuk/mcp-searxng:latest
+    restart: always
+    stdin_open: false
+    environment:
+      SEARXNG_URL: http://searxng:8080
+      MCP_HTTP_PORT: "3000"
+      MCP_HTTP_HOST: 0.0.0.0
+      # Hardened network mode (required if you publish beyond loopback).
+      # Provide values via the shell environment, e.g.:
+      #   MCP_HTTP_AUTH_TOKEN=... MCP_HTTP_ALLOWED_ORIGINS=https://client.example.com \
+      #     podman-compose up -d
+      #MCP_HTTP_HARDEN: "true"
+      #MCP_HTTP_AUTH_TOKEN: ${MCP_HTTP_AUTH_TOKEN:?Set MCP_HTTP_AUTH_TOKEN to expose beyond loopback}
+      #MCP_HTTP_ALLOWED_ORIGINS: ${MCP_HTTP_ALLOWED_ORIGINS:?Set MCP_HTTP_ALLOWED_ORIGINS to expose beyond loopback}
+    ports:
+      # Loopback-only, matching this repo's Immich posture (rootful podman
+      # publishes past firewalld, so 0.0.0.0 would expose plain HTTP to the LAN).
+      - "127.0.0.1:8081:3000"
+    depends_on:
+      - searxng
+
+volumes:
+  searxng-cache:
+  valkey-data:
