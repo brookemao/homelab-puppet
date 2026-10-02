@@ -30,7 +30,10 @@ services:
 
   mcp-searxng:
     container_name: searxng-mcp
-    image: isokoliuk/mcp-searxng:<%= $mcp_version %>
+    # Fully qualified: podman (unlike Docker) refuses to pull short names
+    # non-interactively ("short-name resolution enforced but cannot prompt
+    # without a TTY"), which fails `up -d` under this systemd unit.
+    image: docker.io/isokoliuk/mcp-searxng:<%= $mcp_version %>
     restart: always
     stdin_open: false
     environment:
