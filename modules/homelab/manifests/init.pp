@@ -84,6 +84,11 @@ class homelab (
     require               => [Class['homelab::cockpit'], Class['homelab::ddclient'], Class['homelab::letsencrypt']],
   }
 
+  # The llama/websearch fail2ban jails tail the vhosts' dedicated access logs,
+  # which only exist once nginx has started. Without this a fresh host's first
+  # apply starts fail2ban before the logs exist and those jails fail to load.
+  Class['homelab::nginx'] -> Class['homelab::fail2ban']
+
   # 10. Mount the parkpack drive Immich reads as an external library
   class { 'homelab::parkpack': }
 
