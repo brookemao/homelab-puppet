@@ -14,7 +14,7 @@
 # @param acme_email Contact email for Let's Encrypt registration (defaults to admin@<cloudflare_zone>)
 class homelab (
   Boolean   $manage_services         = true,
-  String[1] $ddclient_install_method = 'tarball',
+  String[1] $ddclient_install_method = 'package',
   String[1] $ddclient_release_tag    = 'latest',
   String[1] $cloudflare_token        = '<SECRET TOKEN HERE>',
   String[1] $cloudflare_zone         = 'brookemao.ca',
@@ -38,7 +38,8 @@ class homelab (
     require        => Class['homelab::firewall'],
   }
 
-  # 5. Install podman and podman-compose (both native on Fedora)
+  # 5. Install podman and podman-compose (both native on Fedora) with custom
+  # storage (overlay driver, graphroot under /home/containers)
   class { 'homelab::podman': }
 
   # 6. Install and configure ddclient from the native DNF package or a GitHub release tarball
