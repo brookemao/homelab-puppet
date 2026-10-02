@@ -1,0 +1,11 @@
+; nginx_backends.cil - allow nginx (httpd_t) to reverse-proxy to the llama and
+; websearch loopback backends.
+; Both backend ports are labeled http_cache_port_t (TCP 8080 ships that way in
+; Fedora policy; TCP 8081 is relabeled to match by homelab::nginx), so one
+; narrow rule covers both.
+; Least-privilege alternative to httpd_can_network_connect (and the nginx
+; worker OUTPUT rules already confine it to loopback anyway).
+; Installed with: semodule -i nginx_backends.cil
+; Removed with:   semodule -r nginx_backends
+(block nginx_backends
+  (allow httpd_t http_cache_port_t (tcp_socket (name_connect))))

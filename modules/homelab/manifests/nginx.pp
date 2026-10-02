@@ -36,6 +36,11 @@
 # @param llama_access_log Dedicated access log for the llama vhost, so the
 #   fail2ban llama jail can count Basic-auth 401s without matching other
 #   vhosts' traffic
+# @param selinux_backends_module_name Name of the custom SELinux allow module
+#   letting nginx reach the llama and websearch backend ports (one module:
+#   both ports share the http_cache_port_t label, so the rule is identical)
+# @param selinux_policy_dir Directory holding the .cil source (shared with
+#   homelab::cockpit's module, so only created when not already defined)
 class homelab::nginx (
   Array[String[1]]     $cockpit_server_names        = ['cockpit.brookemao.ca'],
   String[1]            $cockpit_backend_host        = '127.0.0.1',
@@ -61,6 +66,8 @@ class homelab::nginx (
   String[1]            $llama_htpasswd_path         = '/etc/nginx/llama.htpasswd',
   String[1]            $llama_access_log            = '/var/log/nginx/llama-access.log',
   String[1]            $llama_splash_message        = 'llama.cpp',
+  String[1]            $selinux_backends_module_name  = 'nginx_backends',
+  String[1]            $selinux_policy_dir            = '/usr/local/share/selinux',
 ) {
   # MCP HTTP responses can be SSE streams; the stock 90s upstream timeout
   # would cut long searches short. 10 minutes keeps direct browser streams
@@ -258,5 +265,67 @@ class homelab::nginx (
       'Authorization ""',
     ],
     require                => File[$llama_htpasswd_path],
+  }
+
+  # ---- SELinux: let nginx reach the loopback backends ----
+  # httpd_t may not open TCP connections by default (httpd_can_network_connect
+  # stays off), so a minimal CIL allow module covers both backends following
+  # the homelab::cockpit nginx_cockpit precedent. Both ports end up labeled
+  # http_cache_port_t -- 8080 ships that way in Fedora policy, and 8081 is
+  # relabeled below to match (same pattern as cockpit.pp's port management) --
+  # so one rule serves both, and a second module would be byte-identical.
+  # Provides `semanage`/`semodule`. ensure_packages (not plain packages):
+  # homelab::cockpit declares these too, and duplicate package resources fail
+  # the catalog.
+  ensure_packages(['policycoreutils', 'policycoreutils-python-utils'])
+
+  # Shared with homelab::cockpit's module file; the guard keeps whichever
+  # class parses second from redeclaring it.
+  if !defined(File[$selinux_policy_dir]) {
+    file { $selinux_policy_dir:
+      ensure => directory,
+      owner  => 'root',
+      group  => 'root',
+      mode   => '0755',
+    }
+  }
+
+  file { "${selinux_policy_dir}/${selinux_backends_module_name}.cil":
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    source  => "puppet:///modules/homelab/${selinux_backends_module_name}.cil",
+    require => File[$selinux_policy_dir],
+  }
+
+  # Relabel the websearch backend port to http_cache_port_t so the narrow
+  # module covers it. -m overrides whatever type policy currently gives the
+  # port, -a adds it when unlabeled; the unless guard makes the
+  # already-correct state a no-op. Mirrors the cockpit.pp port exec.
+  exec { 'selinux-websearch-backend-port':
+    command   => "semanage port -m -t http_cache_port_t -p tcp ${websearch_backend_port} || semanage port -a -t http_cache_port_t -p tcp ${websearch_backend_port}",
+    unless    => "semanage port -l | grep -qE '^http_cache_port_t.*\\b${websearch_backend_port}\\b'",
+    logoutput => on_failure,
+    path      => ['/usr/sbin', '/usr/bin', '/sbin', '/bin'],
+    require   => Package['policycoreutils-python-utils'],
+  }
+
+  # Installed directly from vendored CIL source, which needs no compiler
+  # toolchain (semodule consumes .cil natively); reinstalled whenever the
+  # source changes, and always before the nginx service (re)starts so the
+  # workers can reach the backends from the first connection.
+  exec { "install-${selinux_backends_module_name}-selinux-module":
+    command     => "semodule -i ${selinux_policy_dir}/${selinux_backends_module_name}.cil",
+    subscribe   => File["${selinux_policy_dir}/${selinux_backends_module_name}.cil"],
+    refreshonly => true,
+    logoutput   => on_failure,
+    path        => ['/usr/bin', '/usr/sbin', '/bin', '/sbin'],
+    require     => [
+      Package['policycoreutils'],
+      Package['policycoreutils-python-utils'],
+      Exec['selinux-websearch-backend-port'],
+    ],
+    before      => Class['nginx::service'],
   }
 }
