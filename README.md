@@ -223,7 +223,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model` | `String` | `'Qwen3.8-27B-UD-Q4_K_XL.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
+| `model` | `String` | `'Qwen3.8-27B-UD-Q6_K.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
 | `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
 | `image` | `String` | `'localhost/llama-local:latest'` | Must already exist in rootful podman storage (build it with [homelab-llama](https://github.com/brookemao/homelab-llama)) |
@@ -421,7 +421,7 @@ Prerequisites Puppet does not provide (first apply fails loudly without them):
   it with [homelab-llama](https://github.com/brookemao/homelab-llama)
   (`build-llama-local.sh`).
 - GPU devices `/dev/kfd` and `/dev/dri` on the host.
-- The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q4_K_XL.gguf`.
+- The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q6_K.gguf`.
 
 Caveats:
 
