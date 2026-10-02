@@ -1,0 +1,24 @@
+<%- |
+  String $secret_key,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+# Minimal overlay: SearXNG defaults serve only `html`, but mcp-searxng needs
+# `format=json` as its primary search path. use_default_settings inherits
+# everything else upstream.
+use_default_settings: true
+
+search:
+  safe_search: 1
+  default_lang: en
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "<%= $secret_key %>"
+  limiter: true
+  image_proxy: true
+
+valkey:
+  # `valkey` is the container-network hostname of the valkey service in compose.yml.
+  url: valkey://valkey:6379/0

@@ -10,13 +10,14 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **git**: Standard distributed version control system package.
 - **fastfetch**: Modern, lightweight CLI system information display tool.
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban) and a Cockpit failed-login jail (5 failures in 10 min → 1 h ban, doubling per repeat offense up to 48 h).
-- **firewalld**: Firewall service managed via `puppet-firewalld` with ports `443/tcp` and `9090/tcp` (Cockpit) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich` to restart (see `docs/firewalld-podman-immich.md`).
+- **firewalld**: Firewall service managed via `puppet-firewalld` with ports `443/tcp` and `9090/tcp` (Cockpit) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich` and `searxng` to restart (see `docs/firewalld-podman-immich.md`).
 - **podman**: Container runtime with `podman-compose` for compose workloads. Container storage uses the `overlay` driver with `graphroot` relocated to `/home/containers/storage` (SELinux-labeled) instead of the `/var/lib` default.
 - **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.)
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
+- **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
 
 ### Known issues
 
@@ -57,8 +58,9 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 ├── manifests/site.pp        # Masterless entrypoint for `puppet apply`
 └── modules/
     ├── homelab/             # Site profile: git, fastfetch, fail2ban, firewall, podman,
-    │                        #   ddclient, Let's Encrypt, cockpit, nginx (mTLS proxy); declares immich
-    └── immich/              # Immich stack: compose.yml + systemd unit
+    │                        #   ddclient, Let's Encrypt, cockpit, nginx (mTLS proxy); declares immich and searxng
+    ├── immich/              # Immich stack: compose.yml + systemd unit
+    └── searxng/             # SearXNG + MCP stack: compose.yml, settings.yml + systemd unit
 ```
 
 ---
@@ -179,6 +181,19 @@ when no key is present, which is why `data/common.yaml` carries none of them.
 | `base_dir` | `Immich::Absolutepath` | `'/home/immich'` | Directory the deployment lives under; created if missing, never restyled. Its own parent must already exist |
 | `install_dir` | `Immich::Absolutepath` | `'/opt/immich-app'` | Holds the generated `compose.yml` |
 
+### `searxng`
+
+Set these with `searxng::<name>` Hiera keys. Only `secret_key` is required —
+bootstrap collects it into `data/secrets.yaml`; the rest default sensibly.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `secret_key` | `Sensitive[String]` | *(required)* | SearXNG `server.secret_key`. Re-applying after a change restarts the stack via the settings subscription |
+| `version` | `String` | `'latest'` | SearXNG image tag |
+| `mcp_version` | `String` | `'latest'` | mcp-searxng image tag |
+| `port` | `Integer[1, 65535]` | `8081` | Host loopback port published for the MCP HTTP endpoint |
+| `install_dir` | `Searxng::Absolutepath` | `'/opt/searxng-app'` | Holds the generated `compose.yml` and `settings.yml` |
+
 Everything the containers persist lives under `base_dir/data` in a fixed layout, which is what
 lets a single SELinux rule and a single ownership scheme cover all of it:
 
@@ -292,3 +307,35 @@ cat /sys/fs/cgroup/machine.slice/*libpod_pod*/cpu.max
 ```
 
 Pod-level limits need cgroups v2, which Fedora 44 uses by default.
+
+---
+
+## Managing SearXNG
+
+Puppet writes `/opt/searxng-app/compose.yml` and `/opt/searxng-app/settings.yml`
+(the latter carries `searxng::secret_key`, mode `0600`) plus a systemd unit at
+`/etc/systemd/system/searxng.service`, then enables it. The unit wraps
+`podman-compose up -d` / `down` and is what brings the stack back after a reboot -
+podman is daemonless, so `restart: always` alone would not survive one.
+
+```bash
+sudo systemctl status searxng      # is the stack up?
+sudo systemctl restart searxng     # down, then up
+sudo journalctl -u searxng         # compose output
+sudo podman ps                     # the three containers
+sudo podman logs searxng-mcp       # logs from the MCP server
+```
+
+The MCP endpoint listens on loopback port `8081` (`/health` for reachability,
+`/mcp` for clients). `homelab::firewall` opens no port for it, so it is
+reachable from the host but not through firewalld from the LAN. SearXNG itself
+publishes no host port — verify it through the MCP tool: discovery and
+`/health` succeeding do not prove the JSON search path works, so make a real
+`searxng_web_search` call after (re)deploying.
+
+Caveats:
+
+- **Set `searxng::secret_key` before the first run.** The class has no default;
+  without the Hiera key the catalog fails to compile. Bootstrap collects it.
+- **Re-applying after a secret change restarts the stack**, since the service
+  subscribes to the generated files.
