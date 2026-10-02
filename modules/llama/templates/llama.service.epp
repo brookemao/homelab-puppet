@@ -10,8 +10,13 @@
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 # Mirrors homelab-llama test-llama-local.sh (Qwen3.8 thinking-mode preset,
-# ROCm GPU passthrough) except --ctx-size is omitted so llama.cpp sizes the
-# context automatically. Web search comes from the SearXNG MCP server over
+# ROCm GPU passthrough) with a 196608-token context (3/4 of Qwen3 256k max)
+# and a 16 GiB host-RAM
+# prompt cache (--cache-ram, default 8 GiB) so concurrent users can reuse
+# cached prompts; --parallel is omitted so llama.cpp manages concurrent
+# requests automatically; -kvu forces the shared (unified) KV cache.
+# --sleep-idle-seconds unloads the model after 10
+# minutes idle. Web search comes from the SearXNG MCP server over
 # public HTTPS: --ui-config-file pre-registers it (url + Bearer header) for
 # first-time visitors, and the browser calls it directly -- no CORS proxy,
 # no container network to the searxng stack.
@@ -37,6 +42,7 @@ ExecStart=<%= $podman_command %> run --rm \
   --model <%= $model_path %> \
   --host 0.0.0.0 \
   --port 8080 \
+  --ctx-size 196608 \
   --batch-size 2048 \
   --ubatch-size 2048 \
   --threads 8 \
@@ -44,10 +50,11 @@ ExecStart=<%= $podman_command %> run --rm \
   --gpu-layers 999 \
   --split-mode none \
   --load-mode none \
-  --parallel 4 \
   --flash-attn on \
   --cache-type-k q8_0 \
   --cache-type-v q8_0 \
+  --cache-ram 16384 \
+  -kvu \
   --spec-type draft-mtp \
   --spec-draft-n-max 3 \
   --temp 1.0 \
@@ -57,6 +64,7 @@ ExecStart=<%= $podman_command %> run --rm \
   --presence-penalty 0.0 \
   --repeat-penalty 1.0 \
   --chat-template-kwargs '{"reasoning_effort":"<%= $reasoning_effort %>"}' \
+  --sleep-idle-seconds 600 \
   --ui-config-file <%= $ui_config %>
 ExecStop=<%= $podman_command %> stop -t 30 <%= $container_name %>
 Restart=always

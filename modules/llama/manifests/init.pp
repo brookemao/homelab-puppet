@@ -1,8 +1,12 @@
 # @summary Runs llama.cpp llama-server via podman, with SearXNG MCP search tools.
 #
 # Mirrors the homelab-llama test-llama-local.sh settings (Qwen3.8 thinking-mode
-# sampling, ROCm GPU passthrough, q8_0 KV cache, draft-mtp speculation) except
-# --ctx-size is omitted so llama.cpp sizes the context automatically.
+# sampling, ROCm GPU passthrough, q8_0 KV cache, draft-mtp speculation) with a
+# 196608-token context (3/4 of Qwen3 256k max) and a 16 GiB host-RAM prompt cache (--cache-ram) so
+# concurrent users can reuse cached prompts. --parallel is left to llama.cpp to
+# manage concurrent requests automatically, -kvu forces the shared (unified)
+# KV cache. --sleep-idle-seconds unloads the
+# model after 10 minutes idle.
 #
 # The SearXNG MCP server is attached through the Web UI: --ui-config-file
 # pre-registers it for first-time visitors (url + Bearer header, direct
