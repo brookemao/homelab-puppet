@@ -211,14 +211,16 @@ class homelab::nginx (
   }
 
   # ---- llama.cpp behind HTTP Basic auth (llama.brookemao.ca) ----
-  # htpasswd hash only, never the plaintext. Mode 0600 root:nginx: the master
-  # opens it as root before dropping privileges. A password change notifies
-  # the service so the new file is picked up.
+  # htpasswd hash only, never the plaintext. Must be group-readable: unlike
+  # SSL keys (opened once by the master as root), the user file is opened
+  # per-request by the workers running as the nginx user -- 0600 here 500s
+  # every authenticated request. A password change notifies the service so
+  # the new file is picked up.
   file { $llama_htpasswd_path:
     ensure  => file,
     owner   => 'root',
     group   => 'nginx',
-    mode    => '0600',
+    mode    => '0640',
     content => Sensitive(epp('homelab/llama.htpasswd.epp', {
       'username' => $llama_basic_user,
       'password' => $llama_basic_password,
