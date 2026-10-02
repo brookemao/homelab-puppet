@@ -27,10 +27,15 @@
 #   the same secret the searxng module injects into the MCP container
 # @param websearch_bearer_map_path 0600 file holding the token-checking map (http context)
 # @param websearch_bearer_check_path Location-level include rejecting missing bearers
+# @param websearch_access_log Dedicated access log for the websearch vhost, so the
+#   fail2ban websearch jail can count 401s without matching other vhosts' traffic
 # @param llama_basic_user Basic-auth username for the llama vhost
 # @param llama_basic_password SHA-512 crypt hash for the llama vhost (bootstrap
 #   hashes the prompted password with `openssl passwd -6`; the plaintext never
 #   reaches disk, only this hash)
+# @param llama_access_log Dedicated access log for the llama vhost, so the
+#   fail2ban llama jail can count Basic-auth 401s without matching other
+#   vhosts' traffic
 class homelab::nginx (
   Array[String[1]]     $cockpit_server_names        = ['cockpit.brookemao.ca'],
   String[1]            $cockpit_backend_host        = '127.0.0.1',
@@ -48,11 +53,13 @@ class homelab::nginx (
   Integer              $websearch_backend_port      = 8081,
   String[1]            $websearch_bearer_map_path   = '/etc/nginx/conf.d/websearch-bearer-map.conf',
   String[1]            $websearch_bearer_check_path = '/etc/nginx/websearch-bearer-check.conf',
+  String[1]            $websearch_access_log        = '/var/log/nginx/websearch-access.log',
   String[1]            $llama_server_name           = 'llama.brookemao.ca',
   Integer              $llama_backend_port          = 8080,
   String[1]            $llama_basic_user            = 'agentforce',
   Sensitive[String[1]] $llama_basic_password,
   String[1]            $llama_htpasswd_path         = '/etc/nginx/llama.htpasswd',
+  String[1]            $llama_access_log            = '/var/log/nginx/llama-access.log',
   String[1]            $llama_splash_message        = 'llama.cpp',
 ) {
   # MCP HTTP responses can be SSE streams; the stock 90s upstream timeout
@@ -176,6 +183,7 @@ class homelab::nginx (
     ssl                 => $ssl,
     ssl_cert            => $ssl_cert,
     ssl_key             => $ssl_key,
+    access_log          => $websearch_access_log,
     proxy               => "http://127.0.0.1:${websearch_backend_port}",
     proxy_http_version  => '1.1',
     proxy_buffering     => 'off',
@@ -223,6 +231,7 @@ class homelab::nginx (
     ssl                    => $ssl,
     ssl_cert               => $ssl_cert,
     ssl_key                => $ssl_key,
+    access_log             => $llama_access_log,
     proxy                  => "http://127.0.0.1:${llama_backend_port}",
     proxy_http_version     => '1.1',
     proxy_buffering        => 'off',

@@ -25,6 +25,22 @@
 # @param cockpit_maxtime Cap in seconds for exponential Cockpit bans (default: 172800 = 48 hours)
 # @param cockpit_logpath Log file for the Cockpit jail (default: undef = read from systemd journal)
 # @param cockpit_journalmatch Journal match scoping the Cockpit jail to cockpit-ws logs
+# @param llama_enabled Whether to enable the llama Basic-auth jail (counts 401s
+#   in the llama vhost's dedicated nginx access log)
+# @param llama_maxretry Failed llama logins before banning (default: 5)
+# @param llama_bantime llama ban duration in seconds (default: 3600 = 1 hour)
+# @param llama_findtime Time window in seconds to count llama failures (default: 600 = 10 min)
+# @param llama_port Ports guarded by the llama jail (default: http,https)
+# @param llama_logpath Access log file the llama jail tails (written by the
+#   llama nginx vhost; fail2ban must apply after nginx so it exists)
+# @param websearch_enabled Whether to enable the websearch Bearer-auth jail (counts
+#   401s in the websearch vhost's dedicated nginx access log)
+# @param websearch_maxretry Failed websearch authorizations before banning (default: 5)
+# @param websearch_bantime websearch ban duration in seconds (default: 3600 = 1 hour)
+# @param websearch_findtime Time window in seconds to count websearch failures (default: 600 = 10 min)
+# @param websearch_port Ports guarded by the websearch jail (default: http,https)
+# @param websearch_logpath Access log file the websearch jail tails (written by the
+#   websearch nginx vhost; fail2ban must apply after nginx so it exists)
 class homelab::fail2ban (
   String[1] $ensure         = 'installed',
   Boolean   $manage_service = true,
@@ -51,6 +67,18 @@ class homelab::fail2ban (
   Integer   $cockpit_maxtime      = 172800,
   Optional[String[1]] $cockpit_logpath = undef,
   String[1] $cockpit_journalmatch = 'SYSLOG_IDENTIFIER=cockpit-ws',
+  Boolean   $llama_enabled      = true,
+  Integer   $llama_maxretry     = 5,
+  Integer   $llama_bantime      = 3600,
+  Integer   $llama_findtime     = 600,
+  String[1] $llama_port         = 'http,https',
+  String[1] $llama_logpath      = '/var/log/nginx/llama-access.log',
+  Boolean   $websearch_enabled  = true,
+  Integer   $websearch_maxretry = 5,
+  Integer   $websearch_bantime  = 3600,
+  Integer   $websearch_findtime = 600,
+  String[1] $websearch_port     = 'http,https',
+  String[1] $websearch_logpath = '/var/log/nginx/websearch-access.log',
 ) {
   $packages = [
     'fail2ban',
@@ -92,6 +120,18 @@ class homelab::fail2ban (
         'cockpit_maxtime'     => $cockpit_maxtime,
         'cockpit_logpath'     => $cockpit_logpath,
         'cockpit_journalmatch' => $cockpit_journalmatch,
+        'llama_enabled'       => $llama_enabled,
+        'llama_maxretry'      => $llama_maxretry,
+        'llama_bantime'       => $llama_bantime,
+        'llama_findtime'      => $llama_findtime,
+        'llama_port'          => $llama_port,
+        'llama_logpath'       => $llama_logpath,
+        'websearch_enabled'   => $websearch_enabled,
+        'websearch_maxretry'  => $websearch_maxretry,
+        'websearch_bantime'   => $websearch_bantime,
+        'websearch_findtime'  => $websearch_findtime,
+        'websearch_port'      => $websearch_port,
+        'websearch_logpath'   => $websearch_logpath,
       }),
       require => Package[$packages],
       notify  => Service['fail2ban'],
@@ -113,6 +153,26 @@ class homelab::fail2ban (
       group   => 'root',
       mode    => '0644',
       source  => 'puppet:///modules/homelab/fail2ban-cockpit-filter.conf',
+      require => Package[$packages],
+      notify  => Service['fail2ban'],
+    }
+
+    file { '/etc/fail2ban/filter.d/llama.conf':
+      ensure  => file,
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0644',
+      source  => 'puppet:///modules/homelab/fail2ban-llama-filter.conf',
+      require => Package[$packages],
+      notify  => Service['fail2ban'],
+    }
+
+    file { '/etc/fail2ban/filter.d/websearch.conf':
+      ensure  => file,
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0644',
+      source  => 'puppet:///modules/homelab/fail2ban-websearch-filter.conf',
       require => Package[$packages],
       notify  => Service['fail2ban'],
     }

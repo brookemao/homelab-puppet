@@ -20,6 +20,18 @@
       Integer $cockpit_maxtime,
       Optional[String] $cockpit_logpath,
       String  $cockpit_journalmatch,
+      Boolean $llama_enabled,
+      Integer $llama_maxretry,
+      Integer $llama_bantime,
+      Integer $llama_findtime,
+      String  $llama_port,
+      String  $llama_logpath,
+      Boolean $websearch_enabled,
+      Integer $websearch_maxretry,
+      Integer $websearch_bantime,
+      Integer $websearch_findtime,
+      String  $websearch_port,
+      String  $websearch_logpath,
 | -%>
 # /etc/fail2ban/jail.local
 # Managed by OpenVox - manual edits will be overwritten
@@ -89,4 +101,35 @@ logpath  = <%= $cockpit_logpath %>
 backend      = systemd
 journalmatch = <%= $cockpit_journalmatch %>
 <% } -%>
+<% } -%>
+
+<% if $llama_enabled { -%>
+# llama Basic-auth failures: 5 failures in 10 minutes -> 1 hour ban.
+# Counts 401s in the llama vhost's dedicated nginx access log.
+[llama]
+enabled  = true
+port     = <%= $llama_port %>
+filter   = llama
+# Never ban localhost (also covered by [DEFAULT] ignoreip)
+ignoreip = 127.0.0.1/8 ::1
+maxretry = <%= $llama_maxretry %>
+bantime  = <%= $llama_bantime %>
+findtime = <%= $llama_findtime %>
+logpath  = <%= $llama_logpath %>
+<% } -%>
+
+<% if $websearch_enabled { -%>
+# websearch Bearer-auth failures: 5 failures in 10 minutes -> 1 hour ban.
+# Counts 401s in the websearch vhost's dedicated nginx access log. CORS
+# preflight answers 204, so normal browser use never trips this jail.
+[websearch]
+enabled  = true
+port     = <%= $websearch_port %>
+filter   = websearch
+# Never ban localhost (also covered by [DEFAULT] ignoreip)
+ignoreip = 127.0.0.1/8 ::1
+maxretry = <%= $websearch_maxretry %>
+bantime  = <%= $websearch_bantime %>
+findtime = <%= $websearch_findtime %>
+logpath  = <%= $websearch_logpath %>
 <% } -%>
