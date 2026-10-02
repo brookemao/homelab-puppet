@@ -65,9 +65,13 @@ class homelab::nginx (
   # MCP HTTP responses can be SSE streams; the stock 90s upstream timeout
   # would cut long searches short. 10 minutes keeps direct browser streams
   # alive through slow tool calls.
+  # The websearch bearer map keys on "METHOD:Bearer <64 hex chars>" (~79
+  # bytes), past the stock 64-byte map hash bucket; without this nginx
+  # refuses to start ("could not build map_hash").
   class { 'nginx':
-    service_manage     => $manage_service,
-    proxy_read_timeout => '10m',
+    service_manage       => $manage_service,
+    proxy_read_timeout   => '10m',
+    map_hash_bucket_size => 128,
   }
 
   $ssl_cert = "/etc/letsencrypt/live/${cert_name}/fullchain.pem"
