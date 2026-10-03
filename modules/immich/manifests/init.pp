@@ -22,6 +22,9 @@
 # @param cpu_limit Cores the whole stack may use. Applied to the pod podman-compose puts
 #   the containers in, so it is a collective cap, not a per-container one.
 # @param memory_limit Memory the whole stack may use, e.g. '16g'. Collective, as above.
+# @param ml_acceleration 'rocm' runs machine learning on an AMD GPU (the -rocm image, with
+#   /dev/kfd and /dev/dri passed through); 'cpu' uses the plain image. The ROCm image is
+#   several GB larger, so the first start after switching takes a while to pull.
 # @param manage_selinux Whether to label the data directories for container access
 # @param selinux_type SELinux type the containers need on their bind mounts
 # @param compose_command Absolute path to the compose implementation (systemd ExecStart needs a full path)
@@ -40,6 +43,7 @@ class immich (
   String[1]            $group           = 'immich',
   Numeric              $cpu_limit       = 8,
   Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '16g',
+  Enum['cpu', 'rocm']  $ml_acceleration = 'rocm',
   Integer[1]           $uid             = 2283,
   Integer[1]           $gid             = 2283,
   Boolean              $manage_selinux        = true,
@@ -147,6 +151,7 @@ class immich (
       'gid'                => $gid,
       'cpu_limit'          => $cpu_limit,
       'memory_limit'       => $memory_limit,
+      'ml_acceleration'    => $ml_acceleration,
     })),
     require => File[$install_dir],
   }
