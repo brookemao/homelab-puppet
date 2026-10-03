@@ -12,10 +12,11 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban), a Cockpit failed-login jail (5 failures in 10 min → 1 h ban, doubling per repeat offense up to 48 h), and `llama` / `websearch` jails counting HTTP 401s in each nginx vhost's dedicated access log (5 failures in 10 min → 1 h ban). Check them with `sudo fail2ban-client status llama` / `status websearch`; if a jail reports no log file after a fresh apply, confirm nginx created `/var/log/nginx/llama-access.log` and `/var/log/nginx/websearch-access.log`, and check `sudo ausearch -m avc -ts recent` in case SELinux blocks fail2ban from reading them.
 - **firewalld**: Firewall service managed via `puppet-firewalld` with ports `443/tcp` and `9090/tcp` (Cockpit) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow; matched on the pre-DNAT original destination so locally-published container ports stay reachable). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich`, `searxng` and `llama` to restart (see `docs/firewalld-podman-immich.md`).
 - **podman**: Container runtime with `podman-compose` for compose workloads. Container storage uses the `overlay` driver with `graphroot` relocated to `/home/containers/storage` (SELinux-labeled) instead of the `/var/lib` default.
-- **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); `websearch.brookemao.ca` forwards to the SearXNG MCP server on loopback `8081` gated by a Bearer token; `llama.brookemao.ca` forwards to llama-server on loopback `8080` gated by HTTP Basic auth (`agentforce`); all other hosts hit the catch-all default page. (No public Immich forwarding — Immich stays off the internet.) SELinux least privilege, same pattern as Cockpit: a minimal `nginx_backends` allow module lets the workers reach both loopback backends (TCP `8081` is relabeled to the policy-shipped `http_cache_port_t` to match `8080`), no `httpd_can_network_connect`.
+- **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); `websearch.brookemao.ca` forwards to the SearXNG MCP server on loopback `8081` gated by a Bearer token; `llama.brookemao.ca` forwards to llama-server on loopback `8080` gated by HTTP Basic auth (`agentforce`); all other hosts hit the catch-all default page. (Immich is not proxied by nginx — it is published through the Cloudflare Tunnel instead.) SELinux least privilege, same pattern as Cockpit: a minimal `nginx_backends` allow module lets the workers reach both loopback backends (TCP `8081` is relabeled to the policy-shipped `http_cache_port_t` to match `8080`), no `httpd_can_network_connect`.
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
+- **cloudflared**: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) from Cloudflare's RPM repository, publishing `immich.iapark.dev` → Immich on `127.0.0.1:2283` with no inbound port. Remotely managed: the tunnel, its public hostname and the Zero Trust Access policy in front of it live in the Cloudflare dashboard; Puppet only runs the connector with the token from `data/secrets.yaml`. See [Cloudflare Tunnel](#cloudflare-tunnel).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 - **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
 - **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm `llama-local` image (Qwen3.8 thinking-mode preset, 131072-token context, 16 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
@@ -156,6 +157,9 @@ This project uses standard Hiera 5 data lookups.
   # SHA-512 crypt hash of the llama Basic-auth password (user `agentforce`).
   # The bootstrap script prompts for the password and stores only the hash.
   llama::basic_auth_password: 'your_llama_basic_auth_password_hash_here'
+
+  # Optional. See "Cloudflare Tunnel" below.
+  homelab::cloudflared::tunnel_token: 'your_tunnel_token_here'
   ```
   Create it from the example:
   ```bash
@@ -281,6 +285,54 @@ homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookema
    sudo systemctl status ddclient
    ```
 *(Note: `replace => false` by default ensures your API credentials will never be overwritten on subsequent runs unless `ddclient_replace_config=true` is explicitly provided).*
+
+---
+
+## Cloudflare Tunnel
+
+`homelab::cloudflared` installs `cloudflared` from `pkg.cloudflare.com` and runs the connector as
+`cloudflared.service` (a systemd `DynamicUser`, so it has no account or privileges of its own).
+Nothing is opened in firewalld; the tunnel only dials out.
+
+The tunnel is **remotely managed**: Puppet holds only the token. The tunnel, its public hostname
+and the Access application that guards it are all set up in the
+[Zero Trust dashboard](https://one.dash.cloudflare.com/):
+
+1. **Create the tunnel.** Networks > Tunnels > Create a tunnel > Cloudflared, named `homelab`.
+   The install step shows a command ending in `--token <token>`: copy the token and skip the
+   install itself - Puppet does that.
+2. **Add the public hostname** `immich.iapark.dev` → service `HTTP`, URL `127.0.0.1:2283`. Use
+   `127.0.0.1`, not `localhost`: Immich is published on IPv4 loopback only, and `localhost` may
+   resolve to `::1`. Delete any existing `immich.iapark.dev` DNS record first; the dashboard
+   creates the CNAME to the tunnel.
+3. **Put Access in front of it.** Access > Applications > Add > Self-hosted, domain
+   `immich.iapark.dev`, with an Allow policy for the people who should get in (e.g. their email
+   addresses). Then, on the tunnel's public hostname, turn on Access JWT validation
+   ("Enforce Access JSON Web Token validation") so the connector rejects anything that did not
+   pass through Access.
+4. **Let the mobile app through.** The Immich app cannot complete the Access browser login.
+   Create a service token (Access > Service Auth), add a policy with action *Service Auth* that
+   includes it, and enter its `CF-Access-Client-Id` and `CF-Access-Client-Secret` as custom proxy
+   headers in the app (Settings > Advanced).
+
+Then re-run `bootstrap/bootstrap.sh`: whenever `data/secrets.yaml` has no tunnel token it asks for
+one (or takes `CLOUDFLARE_TUNNEL_TOKEN`) and saves it as `homelab::cloudflared::tunnel_token`.
+Leaving it blank skips it. The service starts once the token is present; the dashboard shows the
+tunnel as Healthy once it connects.
+
+```bash
+sudo systemctl status cloudflared
+sudo journalctl -u cloudflared
+```
+
+Caveats:
+
+- **Uploads over 100 MB fail.** Cloudflare's Free and Pro plans cap a proxied request body at
+  100 MB, so large videos cannot be uploaded through `immich.iapark.dev`. Upload them on the LAN
+  instead.
+- **fail2ban does not cover tunnel traffic.** The `[immich]` jail bans client IPs in firewalld,
+  but tunnel requests reach the host over cloudflared's outbound connection, so those bans never
+  apply. Access (and Cloudflare's WAF) is the protection here.
 
 ---
 

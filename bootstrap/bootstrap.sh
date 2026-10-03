@@ -4,7 +4,8 @@
 #
 # 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
 # 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password,
-#    SearXNG secret key, SearXNG MCP bearer token, llama Basic-auth password)
+#    SearXNG secret key, SearXNG MCP bearer token, llama Basic-auth password) and, whenever
+#    data/secrets.yaml lacks one, the optional Cloudflare Tunnel token
 # 3. Executes masterless run with sudo (`sudo puppet apply`)
 #
 
@@ -278,6 +279,31 @@ fi
 
 upsert_secret_line 'llama::basic_auth_password' "${LLAMA_BASIC_HASH}"
 unset LLAMA_BASIC_HASH
+
+# Cloudflare Tunnel token for immich.iapark.dev (homelab::cloudflared), copied from
+# the Zero Trust dashboard (see "Cloudflare Tunnel" in the README). Optional, and
+# often added after the first run, so ask whenever it is missing rather than only
+# when secrets.yaml is first created. Precedence: CLOUDFLARE_TUNNEL_TOKEN
+# environment override, then the existing data/secrets.yaml value, otherwise
+# prompt (empty input skips; the tunnel then stays stopped).
+TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
+if [[ -n "${TUNNEL_TOKEN// }" ]]; then
+    ok "Using Cloudflare Tunnel token from environment variable CLOUDFLARE_TUNNEL_TOKEN."
+    upsert_secret_line 'homelab::cloudflared::tunnel_token' "${TUNNEL_TOKEN}"
+elif [[ -n "$(read_secret 'homelab::cloudflared::tunnel_token')" ]]; then
+    ok "Cloudflare Tunnel token already present in data/secrets.yaml. Skipping prompt."
+else
+    echo -n "Enter Cloudflare Tunnel token for immich.iapark.dev (hidden, empty to skip): "
+    read -r -s TUNNEL_TOKEN || true
+    echo ""
+
+    if [[ -n "${TUNNEL_TOKEN// }" ]]; then
+        upsert_secret_line 'homelab::cloudflared::tunnel_token' "${TUNNEL_TOKEN}"
+    else
+        warn "No Cloudflare Tunnel token; cloudflared will be installed but the tunnel left stopped."
+    fi
+fi
+unset TUNNEL_TOKEN
 
 echo ""
 

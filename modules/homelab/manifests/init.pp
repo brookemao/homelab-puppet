@@ -1,10 +1,11 @@
 # @summary Homelab baseline configuration for Fedora 44
 #
 # Sets up git, fastfetch, firewalld, fail2ban, podman, ddclient, TLS,
-# Cockpit, nginx, Immich, and SearXNG from native Fedora repositories
+# Cockpit, nginx, Immich, SearXNG, and a Cloudflare Tunnel to Immich, from native Fedora
+# repositories (cloudflared from Cloudflare's)
 #
 # @param manage_services Whether to manage and start background services (fail2ban,
-#   ddclient, certificate renewal, nginx, and the immich systemd unit)
+#   ddclient, certificate renewal, nginx, the immich systemd unit, and cloudflared)
 # @param ddclient_install_method 'package' (via dnf, default) or 'tarball' (from GitHub release tarball)
 # @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0' (tarball installs only)
 # @param cloudflare_token API token for Cloudflare DDNS
@@ -130,4 +131,10 @@ class homelab (
   Class['homelab::firewall'] ~> Class['immich']
   Class['homelab::firewall'] ~> Class['searxng']
   Class['homelab::firewall'] ~> Class['llama']
+
+  # 14. Publish Immich through a Cloudflare Tunnel. The token comes from the
+  # homelab::cloudflared::tunnel_token Hiera key.
+  class { 'homelab::cloudflared':
+    manage_service => $manage_services,
+  }
 }
