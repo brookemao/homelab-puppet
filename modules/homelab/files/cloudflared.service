@@ -1,0 +1,26 @@
+# Managed by OpenVox - manual edits will be overwritten
+[Unit]
+Description=Cloudflare Tunnel
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=notify
+# Supplies TUNNEL_TOKEN; the unit refuses to start without it
+EnvironmentFile=/etc/cloudflared/tunnel.env
+# Updates come from dnf, not cloudflared's self-updater. Routing comes from the
+# dashboard (remotely managed tunnel), so there is no local config file.
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run
+Restart=on-failure
+RestartSec=5s
+
+# cloudflared only makes outbound connections
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
