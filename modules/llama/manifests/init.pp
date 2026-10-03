@@ -21,9 +21,12 @@
 #
 # Prerequisites Puppet does NOT provide: the $image image built into rootful
 # podman storage (homelab-llama build-llama-local.sh), the GPU devices
-# (/dev/kfd, /dev/dri), and the model file under $models_dir.
+# (/dev/kfd, /dev/dri), and the model and mmproj files under $models_dir.
 #
 # @param model GGUF basename under $models_dir, or an absolute container path.
+# @param mmproj Vision projector GGUF (basename under $models_dir, or an absolute container
+#   path) passed as --mmproj so the model accepts images. Must match $model - for the
+#   default it is mmproj-F16.gguf from unsloth/Qwen3.8-27B-GGUF. undef runs text-only.
 # @param models_dir Host directory holding GGUFs, mounted read-only at the same path.
 # @param port Host loopback port published for the HTTP endpoint.
 # @param image Container image (must already exist in rootful podman storage).
@@ -39,6 +42,7 @@
 #
 class llama (
   String[1]            $model                 = 'Qwen3.8-27B-UD-Q6_K.gguf',
+  Optional[String[1]]  $mmproj                = 'mmproj-F16.gguf',
   Llama::Absolutepath  $models_dir            = '/home/llama/models',
   Integer[1, 65535]    $port                  = 8080,
   String[1]            $image                 = 'localhost/llama-local:latest',
@@ -54,6 +58,11 @@ class llama (
   $model_path = $model =~ /^\// ? {
     true    => $model,
     default => "${models_dir}/${model}",
+  }
+  $mmproj_path = $mmproj ? {
+    undef   => undef,
+    /^\//   => $mmproj,
+    default => "${models_dir}/${mmproj}",
   }
 
   file { $install_dir:
@@ -95,6 +104,7 @@ class llama (
       'port'             => $port,
       'models_dir'       => $models_dir,
       'model_path'       => $model_path,
+      'mmproj_path'      => $mmproj_path,
       'ui_config'        => $ui_config,
       'image'            => $image,
       'reasoning_effort' => $reasoning_effort,

@@ -253,6 +253,10 @@ class homelab::nginx (
     # SSE chat streams idle between tokens; 10m keeps --api-key-less clients
     # alive through long thinking runs.
     proxy_read_timeout     => '10m',
+    # Images reach llama-server base64-encoded inside the chat JSON (~4/3 the file
+    # size), and every turn resends the whole conversation, images included. nginx's
+    # 1m default (puppet-nginx sets none) would reject any photo with a 413.
+    client_max_body_size   => '100m',
     proxy_set_header       => [
       'Host $host',
       'X-Real-IP $remote_addr',
