@@ -228,6 +228,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `model` | `String` | `'Qwen3.8-27B-UD-Q6_K.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
+| `mmproj` | `Optional[String]` | `'mmproj-F16.gguf'` | Vision projector passed as `--mmproj` so the model accepts images; must match `model`. `undef` (`~` in Hiera) runs text-only |
 | `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
 | `image` | `String` | `'localhost/llama-local:latest'` | Must already exist in rootful podman storage (build it with [homelab-llama](https://github.com/brookemao/homelab-llama)) |
@@ -474,9 +475,16 @@ Prerequisites Puppet does not provide (first apply fails loudly without them):
   (`build-llama-local.sh`).
 - GPU devices `/dev/kfd` and `/dev/dri` on the host.
 - The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q6_K.gguf`.
+- The matching vision projector, `/home/llama/models/mmproj-F16.gguf` (928 MB, from
+  [unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF)). Set
+  `llama::mmproj: ~` to run text-only without it.
 
 Caveats:
 
+- **Images need the projector and a large request body.** `--mmproj` loads the vision
+  projector onto the GPU (about 0.9 GB more GPU memory). Images travel base64-encoded in the
+  chat JSON and are resent every turn, so the `llama.brookemao.ca` vhost allows request
+  bodies up to 100 MB instead of nginx's 1 MB default.
 - **`--ctx-size 131072` is passed.** This sets the context length to 131072
   tokens (1/2 of the 262144-token Qwen3 maximum, kept this low to avoid OOM);
   the KV cache uses the configured q8_0 cache types.

@@ -4,6 +4,7 @@
   Integer $port,
   String  $models_dir,
   String  $model_path,
+  Optional[String] $mmproj_path,
   String  $ui_config,
   String  $image,
   String  $reasoning_effort,
@@ -41,6 +42,9 @@ ExecStart=<%= $podman_command %> run --rm \
   -v <%= $ui_config %>:<%= $ui_config %>:ro,Z \
   <%= $image %> \
   --model <%= $model_path %> \
+<%- if $mmproj_path { -%>
+  --mmproj <%= $mmproj_path %> \
+<%- } -%>
   --host 0.0.0.0 \
   --port 8080 \
   --ctx-size 131072 \
