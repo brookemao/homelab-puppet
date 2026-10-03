@@ -196,6 +196,7 @@ when no key is present, which is why `data/common.yaml` carries none of them.
 | `port` | `Integer[1, 65535]` | `2283` | Host port published for the web UI |
 | `cpu_limit` | `Numeric` | `4` | Cores the whole stack may use |
 | `memory_limit` | `String` | `'16g'` | Memory the whole stack may use |
+| `ml_acceleration` | `Enum['cpu', 'rocm']` | `'rocm'` | `'rocm'` runs machine learning on the AMD GPU (`-rocm` image, `/dev/kfd` + `/dev/dri`); `'cpu'` uses the plain image |
 | `base_dir` | `Immich::Absolutepath` | `'/home/immich'` | Directory the deployment lives under; created if missing, never restyled. Its own parent must already exist |
 | `install_dir` | `Immich::Absolutepath` | `'/opt/immich-app'` | Holds the generated `compose.yml` |
 

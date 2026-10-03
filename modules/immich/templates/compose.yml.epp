@@ -12,6 +12,7 @@
   Integer $gid,
   Numeric $cpu_limit,
   String  $memory_limit,
+  String  $ml_acceleration,
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 name: immich
@@ -58,7 +59,18 @@ services:
 
   immich-machine-learning:
     container_name: immich_machine_learning
+<%- if $ml_acceleration == 'rocm' { -%>
+    # AMD GPU via ROCm, as in Immich's hwaccel.ml.yml. Same device passthrough as the
+    # llama container; no SELinux relabelling is needed for --device nodes.
+    image: ghcr.io/immich-app/immich-machine-learning:<%= $version %>-rocm
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/kfd:/dev/kfd
+    group_add:
+      - video
+<%- } else { -%>
     image: ghcr.io/immich-app/immich-machine-learning:<%= $version %>
+<%- } -%>
     volumes:
       - <%= $ml_cache %>:/cache
     restart: always
