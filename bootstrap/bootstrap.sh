@@ -142,7 +142,7 @@ else
 homelab::cloudflare_token: '${CF_KEY}'
 immich::db_password: '${IMMICH_DB_PASSWORD}'
 EOF
-    chmod 660 "${PROJECT_ROOT}/data/secrets.yaml"
+    sudo chmod 660 "${PROJECT_ROOT}/data/secrets.yaml"
     ok "Saved secrets to ${PROJECT_ROOT}/data/secrets.yaml (mode 0660)."
 fi
 
