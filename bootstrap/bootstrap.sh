@@ -175,7 +175,7 @@ upsert_secret_line() {
         sed -i "s|^[[:space:]]*${key}:.*|${key}: '${value_sed}'|" "${SECRETS_FILE}"
         ok "Updated ${key} in ${SECRETS_FILE}."
     fi
-    chmod 660 "${SECRETS_FILE}"
+    sudo chmod 660 "${SECRETS_FILE}"
 }
 
 # read_secret <key>: print the current data/secrets.yaml value for a key
