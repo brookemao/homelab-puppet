@@ -10,3 +10,6 @@ homelab::ddclient_replace_config: false
 # Mounted read-only into the Immich server; add under Administration > External Libraries
 immich::external_libraries:
   - '/mnt/parkpack/photos'
+
+# Bulk ML processing is done; run the plain CPU image instead of the larger -rocm image
+immich::ml_acceleration: 'cpu'
