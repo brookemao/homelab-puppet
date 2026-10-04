@@ -13,3 +13,6 @@ immich::external_libraries:
 
 # Bulk ML processing is done; run the plain CPU image instead of the larger -rocm image
 immich::ml_acceleration: 'cpu'
+
+# Uncensored OrcaRouter build for open-ended chat
+llama::model: 'Qwen3.8-27B-Uncensored-OrcaRouter-Q6_K.gguf'
