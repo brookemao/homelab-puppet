@@ -21,6 +21,9 @@
 #   the token nothing can authenticate to the public websearch vhost.
 # @param version SearXNG image tag.
 # @param mcp_version mcp-searxng image tag.
+# @param memory_limit Memory the whole stack may use, e.g. '4g'. Collective:
+#   applied to the pod podman-compose puts the containers in, capping all
+#   three containers together rather than each one individually.
 # @param port Host port published for the MCP HTTP endpoint (loopback-only).
 # @param mcp_allowed_origins CORS origins the MCP server accepts (browser
 #   direct access; proxied requests are unaffected).
@@ -36,6 +39,7 @@ class searxng (
   Sensitive[String[1]]  $auth_token,
   String[1]             $version            = 'latest',
   String[1]             $mcp_version        = 'latest',
+  Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '4g',
   Integer[1, 65535]     $port               = 8081,
   Searxng::Absolutepath $install_dir        = '/opt/searxng-app',
   Searxng::Absolutepath $compose_command    = '/usr/bin/podman-compose',
@@ -66,6 +70,7 @@ class searxng (
     content => Sensitive(epp('searxng/compose.yml.epp', {
       'version'       => $version,
       'mcp_version'   => $mcp_version,
+      'memory_limit'  => $memory_limit,
       'port'          => $port,
       'settings_file' => $settings_file,
       'auth_token'    => $auth_token.unwrap,

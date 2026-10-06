@@ -19,7 +19,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **cloudflared**: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) from Cloudflare's RPM repository, publishing `immich.iapark.dev` → Immich on `127.0.0.1:2283` with no inbound port. Remotely managed: the tunnel, its public hostname and the Zero Trust Access policy in front of it live in the Cloudflare dashboard; Puppet only runs the connector with the token from `data/secrets.yaml`. See [Cloudflare Tunnel](#cloudflare-tunnel).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 - **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
-- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm (`localhost/llama-rocm`) or Vulkan (`localhost/llama-vulkan`) image (Qwen3.8 thinking-mode preset, 131072-token context, 16 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
+- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm (`localhost/llama-rocm`) or Vulkan (`localhost/llama-vulkan`) image (Qwen3.8 thinking-mode preset, 131072-token context, 8 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
 
 ### Known issues
 
@@ -195,7 +195,7 @@ when no key is present, which is why `data/common.yaml` carries none of them.
 | `timezone` | `String` | `'America/Los_Angeles'` | `TZ` passed to the containers |
 | `port` | `Integer[1, 65535]` | `2283` | Host port published for the web UI |
 | `cpu_limit` | `Numeric` | `4` | Cores the whole stack may use |
-| `memory_limit` | `String` | `'16g'` | Memory the whole stack may use |
+| `memory_limit` | `String` | `'8g'` | Memory the whole stack may use |
 | `ml_acceleration` | `Enum['cpu', 'rocm']` | `'rocm'` | `'rocm'` runs machine learning on the AMD GPU (`-rocm` image, `/dev/kfd` + `/dev/dri`); `'cpu'` uses the plain image |
 | `base_dir` | `Immich::Absolutepath` | `'/home/immich'` | Directory the deployment lives under; created if missing, never restyled. Its own parent must already exist |
 | `install_dir` | `Immich::Absolutepath` | `'/opt/immich-app'` | Holds the generated `compose.yml` |
@@ -212,6 +212,7 @@ sensibly.
 | `auth_token` | `Sensitive[String]` | *(required)* | Bearer token for the public MCP vhost; also injected into the MCP container as `MCP_HTTP_AUTH_TOKEN`. Re-applying after a change restarts the stack and reloads nginx |
 | `version` | `String` | `'latest'` | SearXNG image tag |
 | `mcp_version` | `String` | `'latest'` | mcp-searxng image tag |
+| `memory_limit` | `String` | `'4g'` | Memory the whole stack may use (collective pod cap) |
 | `port` | `Integer[1, 65535]` | `8081` | Host loopback port published for the MCP HTTP endpoint |
 | `mcp_allowed_origins` | `String` | `'https://llama.brookemao.ca'` | CORS origins the MCP server accepts — this is what lets the browser call it directly from the llama Web UI |
 | `mcp_allowed_hosts` | `String` | `"websearch.brookemao.ca,localhost,127.0.0.1,localhost:${port},127.0.0.1:${port}"` | Host values the MCP server accepts (matched exactly, port included, so the loopback port forms are needed for direct `curl` checks) |
@@ -234,7 +235,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
 | `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
 | `reasoning_effort` | `String` | `'xhigh'` | Thinking effort passed to the chat template |
-| `memory_limit` | `String` | `'16g'` | RAM the container may use; over-allocation fails inside the container instead of OOMing the host |
+| `memory_limit` | `String` | `'8g'` | RAM the container may use; over-allocation fails inside the container instead of OOMing the host |
 | `vulkan_pci_id` | `Optional[String]` | `undef` | Explicit dGPU PCI slot override (e.g. `'0000:03:00.0'`); defaults to the `llama_dgpu_pci` fact (Navi 48 lookup), else `'0000:03:00.0'`. The unit resolves that slot's stable `/dev/dri/by-path` symlinks at each start into `/dev/llama-dgpu-render` and `/dev/llama-dgpu-card` (mapped to `renderD128`/`card0`) |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
@@ -374,7 +375,7 @@ The first start pulls several GB of images; the unit allows 15 minutes for it.
 ### Resource limits
 
 `cpu_limit` and `memory_limit` cap the stack **collectively**, not per container. All four
-services together get 4 cores and 16 GB.
+services together get 4 cores and 8 GB.
 
 podman-compose puts every service of a project into a pod (`pod_immich` here), and a pod
 is a cgroup. Limiting the pod limits everything inside it, so the compose file sets the
@@ -386,7 +387,7 @@ x-podman:
     - --infra=false
     - --share=
     - --cpus=4
-    - --memory=16g
+    - --memory=8g
 ```
 
 `pod_args` **replaces** podman-compose's defaults rather than extending them, which is why
@@ -486,9 +487,9 @@ Caveats:
 - **`--ctx-size 131072` is passed.** This sets the context length to 131072
   tokens (1/2 of the 262144-token Qwen3 maximum, kept this low to avoid OOM);
   the KV cache uses the configured q8_0 cache types.
-- **`--cache-ram 16384` is passed.** The host-RAM prompt cache is raised from
-  the 8 GiB default to 16 GiB so more prompt/KV state survives in system RAM
-  when handling multiple users concurrently.
+- **`--cache-ram 8192` is passed.** The host-RAM prompt cache stays at the
+  8 GiB llama.cpp default, keeping prompt/KV state in system RAM bounded
+  under the container's memory cap.
 - **No `--parallel` is passed.** llama.cpp manages concurrent requests using
   its defaults.
 - **`-kvu` is passed.** This forces the shared (unified) KV cache across

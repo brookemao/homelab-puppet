@@ -15,8 +15,8 @@
 # Mirrors homelab-llama test settings (Qwen3.8 thinking-mode preset,
 # GPU passthrough) with a 131072-token context (1/2 of Qwen3 256k max,
 # reduced to avoid OOM)
-# and a 16 GiB host-RAM
-# prompt cache (--cache-ram, default 8 GiB) so concurrent users can reuse
+# and a 8 GiB host-RAM
+# prompt cache (--cache-ram 8192) so concurrent users can reuse
 # cached prompts; --parallel is omitted so llama.cpp manages concurrent
 # requests automatically; -kvu forces the shared (unified) KV cache.
 # --sleep-idle-seconds unloads the model after 10
@@ -73,7 +73,7 @@ ExecStart=<%= $podman_command %> run --rm \
   --flash-attn on \
   --cache-type-k q8_0 \
   --cache-type-v q8_0 \
-  --cache-ram 16384 \
+  --cache-ram 8192 \
   -kvu \
   --spec-type draft-mtp \
   --spec-draft-n-max 3 \

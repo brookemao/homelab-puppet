@@ -21,7 +21,7 @@
 #   uid under a container-readable SELinux label (see homelab::parkpack).
 # @param cpu_limit Cores the whole stack may use. Applied to the pod podman-compose puts
 #   the containers in, so it is a collective cap, not a per-container one.
-# @param memory_limit Memory the whole stack may use, e.g. '16g'. Collective, as above.
+# @param memory_limit Memory the whole stack may use, e.g. '8g'. Collective, as above.
 # @param ml_acceleration 'rocm' runs machine learning on an AMD GPU (the -rocm image, with
 #   /dev/kfd and /dev/dri passed through); 'cpu' uses the plain image. The ROCm image is
 #   several GB larger, so the first start after switching takes a while to pull.
@@ -42,7 +42,7 @@ class immich (
   String[1]            $user            = 'immich',
   String[1]            $group           = 'immich',
   Numeric              $cpu_limit       = 8,
-  Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '16g',
+  Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '8g',
   Enum['cpu', 'rocm']  $ml_acceleration = 'rocm',
   Integer[1]           $uid             = 2283,
   Integer[1]           $gid             = 2283,
