@@ -25,9 +25,8 @@
 # file under $models_dir.
 #
 # @param backend GPU backend: 'rocm' passes /dev/kfd + /dev/dri with the
-#   ROCm library path; 'vulkan' passes only /dev/dri with
-#   GGML_VK_VISIBLE_DEVICES=1 so llama.cpp picks the dGPU. Selects the
-#   default $image when $image is undef.
+#   ROCm library path; 'vulkan' passes only the single dGPU (see
+#   $vulkan_pci_id). Selects the default $image when $image is undef.
 # @param model GGUF basename under $models_dir, or an absolute container path.
 # @param models_dir Host directory holding GGUFs, mounted read-only at the same path.
 # @param port Host loopback port published for the HTTP endpoint.
@@ -38,6 +37,12 @@
 # @param reasoning_effort Thinking effort passed to the chat template.
 # @param memory_limit RAM the container may use, e.g. '16g'. Caps llama-server
 #   so a runaway allocation fails inside the container instead of OOMing the host.
+# @param vulkan_pci_id Explicit dGPU PCI slot override (e.g. '0000:03:00.0').
+#   Defaults to the llama_dgpu_pci fact (Navi 48 lookup), else '0000:03:00.0'.
+#   The unit resolves that slot's stable /dev/dri/by-path symlinks at each
+#   start (via ExecStartPre) into /dev/llama-dgpu-render and
+#   /dev/llama-dgpu-card (mapped to renderD128/card0 in the container), so
+#   selection survives card-number changes across reboots.
 # @param searxng_mcp_url Public MCP endpoint the Web UI connects to (through the proxy).
 # @param searxng_bearer_token Bearer token for the public MCP endpoint; same
 #   secret as searxng::auth_token (homelab passes the shared lookup through).
@@ -55,6 +60,7 @@ class llama (
   Optional[String[1]]  $image                 = undef,
   String[1]            $reasoning_effort      = 'xhigh',
   Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '16g',
+  Optional[Pattern[/\A[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9]\z/]] $vulkan_pci_id = undef,
   String[1]            $searxng_mcp_url       = 'https://websearch.brookemao.ca/mcp',
   Sensitive[String[1]] $searxng_bearer_token,
   Llama::Absolutepath  $install_dir           = '/opt/llama-app',
@@ -67,6 +73,9 @@ class llama (
     undef   => "localhost/llama-${backend}:latest",
     default => $image,
   }
+  # Explicit override wins; otherwise the Navi 48 lookup; otherwise the
+  # known-good slot. pick skips undef/empty values left to right.
+  $dgpu_pci_id = pick($vulkan_pci_id, $facts['llama_dgpu_pci'], '0000:03:00.0')
   $model_path = $model =~ /^\// ? {
     true    => $model,
     default => "${models_dir}/${model}",
@@ -116,6 +125,7 @@ class llama (
       'backend'          => $backend,
       'reasoning_effort' => $reasoning_effort,
       'memory_limit'     => $memory_limit,
+      'vulkan_pci_id'    => $dgpu_pci_id,
     }),
     notify  => Exec["${service_name}-daemon-reload"],
   }
