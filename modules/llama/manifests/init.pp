@@ -25,8 +25,9 @@
 # file under $models_dir.
 #
 # @param backend GPU backend: 'rocm' passes /dev/kfd + /dev/dri with the
-#   ROCm library path; 'vulkan' passes only /dev/dri. Selects the default
-#   $image when $image is undef.
+#   ROCm library path; 'vulkan' passes only /dev/dri with
+#   GGML_VK_VISIBLE_DEVICES=1 so llama.cpp picks the dGPU. Selects the
+#   default $image when $image is undef.
 # @param model GGUF basename under $models_dir, or an absolute container path.
 # @param models_dir Host directory holding GGUFs, mounted read-only at the same path.
 # @param port Host loopback port published for the HTTP endpoint.

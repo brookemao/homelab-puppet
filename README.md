@@ -228,7 +228,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `backend` | `Enum['rocm', 'vulkan']` | `'rocm'` | GPU backend: `rocm` passes `/dev/kfd` + `/dev/dri` with the ROCm library path; `vulkan` passes only `/dev/dri`. Also selects the default `image` when `image` is unset |
+| `backend` | `Enum['rocm', 'vulkan']` | `'rocm'` | GPU backend: `rocm` passes `/dev/kfd` + `/dev/dri` with the ROCm library path; `vulkan` passes only `/dev/dri` with `GGML_VK_VISIBLE_DEVICES=1` (dGPU). Also selects the default `image` when `image` is unset |
 | `model` | `String` | `'Qwen3.8-27B-UD-Q6_K.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
 | `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
