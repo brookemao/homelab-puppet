@@ -195,7 +195,7 @@ when no key is present, which is why `data/common.yaml` carries none of them.
 | `timezone` | `String` | `'America/Los_Angeles'` | `TZ` passed to the containers |
 | `port` | `Integer[1, 65535]` | `2283` | Host port published for the web UI |
 | `cpu_limit` | `Numeric` | `4` | Cores the whole stack may use |
-| `memory_limit` | `String` | `'8g'` | Memory the whole stack may use |
+| `memory_limit` | `String` | `'12g'` | Memory the whole stack may use |
 | `ml_acceleration` | `Enum['cpu', 'rocm']` | `'rocm'` | `'rocm'` runs machine learning on the AMD GPU (`-rocm` image, `/dev/kfd` + `/dev/dri`); `'cpu'` uses the plain image |
 | `base_dir` | `Immich::Absolutepath` | `'/home/immich'` | Directory the deployment lives under; created if missing, never restyled. Its own parent must already exist |
 | `install_dir` | `Immich::Absolutepath` | `'/opt/immich-app'` | Holds the generated `compose.yml` |
@@ -235,7 +235,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
 | `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
 | `reasoning_effort` | `String` | `'xhigh'` | Thinking effort passed to the chat template |
-| `memory_limit` | `String` | `'8g'` | RAM the container may use; over-allocation fails inside the container instead of OOMing the host |
+| `memory_limit` | `String` | `'10g'` | RAM the container may use; over-allocation fails inside the container instead of OOMing the host |
 | `vulkan_pci_id` | `Optional[String]` | `undef` | Explicit dGPU PCI slot override (e.g. `'0000:03:00.0'`); defaults to the `llama_dgpu_pci` fact (Navi 48 lookup), else `'0000:03:00.0'`. The unit resolves that slot's stable `/dev/dri/by-path` symlinks at each start into `/dev/llama-dgpu-render` and `/dev/llama-dgpu-card` (mapped to `renderD128`/`card0`) |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
@@ -375,7 +375,7 @@ The first start pulls several GB of images; the unit allows 15 minutes for it.
 ### Resource limits
 
 `cpu_limit` and `memory_limit` cap the stack **collectively**, not per container. All four
-services together get 4 cores and 8 GB.
+services together get 4 cores and 12 GB.
 
 podman-compose puts every service of a project into a pod (`pod_immich` here), and a pod
 is a cgroup. Limiting the pod limits everything inside it, so the compose file sets the
@@ -387,7 +387,7 @@ x-podman:
     - --infra=false
     - --share=
     - --cpus=4
-    - --memory=8g
+    - --memory=12g
 ```
 
 `pod_args` **replaces** podman-compose's defaults rather than extending them, which is why
