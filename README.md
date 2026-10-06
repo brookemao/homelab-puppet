@@ -232,7 +232,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | `model` | `String` | `'Qwen3.8-27B-UD-Q6_K.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
 | `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
-| `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
+| `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
 | `reasoning_effort` | `String` | `'xhigh'` | Thinking effort passed to the chat template |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
@@ -473,7 +473,11 @@ Prerequisites Puppet does not provide (first apply fails loudly without them):
 
 - The container image in rootful podman storage — `localhost/llama-rocm:latest`
   by default, or `localhost/llama-vulkan:latest` with `llama::backend: 'vulkan'`
-  — build it with [homelab-llama](https://github.com/brookemao/homelab-llama).
+  — build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)
+  so it lands in rootful (system) storage where the root systemd unit can see
+  it (a user-storage build is invisible to the unit). The unit passes
+  `--pull=never`, so a missing image fails fast instead of attempting a
+  registry pull from `localhost`.
 - GPU devices `/dev/kfd` and `/dev/dri` (ROCm) or `/dev/dri` (Vulkan) on the host.
 - The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q6_K.gguf`.
 
