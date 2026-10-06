@@ -228,13 +228,14 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `backend` | `Enum['rocm', 'vulkan']` | `'rocm'` | GPU backend: `rocm` passes `/dev/kfd` + `/dev/dri` with the ROCm library path; `vulkan` passes only `/dev/dri` with `GGML_VK_VISIBLE_DEVICES=1` (dGPU). Also selects the default `image` when `image` is unset |
+| `backend` | `Enum['rocm', 'vulkan']` | `'rocm'` | GPU backend: `rocm` passes `/dev/kfd` + `/dev/dri` with the ROCm library path; `vulkan` passes only the single dGPU (see `vulkan_pci_id`). Also selects the default `image` when `image` is unset |
 | `model` | `String` | `'Qwen3.8-27B-UD-Q6_K.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
 | `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
 | `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
 | `reasoning_effort` | `String` | `'xhigh'` | Thinking effort passed to the chat template |
 | `memory_limit` | `String` | `'16g'` | RAM the container may use; over-allocation fails inside the container instead of OOMing the host |
+| `vulkan_pci_id` | `Optional[String]` | `undef` | Explicit dGPU PCI slot override (e.g. `'0000:03:00.0'`); defaults to the `llama_dgpu_pci` fact (Navi 48 lookup), else `'0000:03:00.0'`. The unit resolves that slot's stable `/dev/dri/by-path` symlinks at each start into `/dev/llama-dgpu-render` and `/dev/llama-dgpu-card` (mapped to `renderD128`/`card0`) |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
 | `install_dir` | `Llama::Absolutepath` | `'/opt/llama-app'` | Holds the generated `ui-config.json`, bind-mounted read-only into the container |
@@ -505,3 +506,13 @@ Caveats:
   independently and the container needs no special egress. Puppet still
   restarts llama on firewall changes because the published-port forwarding
   depends on podman network rules.
+- **Vulkan dGPU selection is automatic.** The host has two AMD GPUs
+  (Navi 48 dGPU at `03:00.0`, Raphael iGPU at `12:00.0`), and `card*`/`renderD*`
+  numbers drift across reboots, so the unit selects the dGPU by PCI-anchored
+  `/dev/dri/by-path` symlinks: the `llama_dgpu_pci` fact finds the Navi 48 slot
+  via `lspci` (override with `llama::vulkan_pci_id`, fallback `'0000:03:00.0'`),
+  and `ExecStartPre` resolves them into colon-free `/dev/llama-dgpu-render`
+  and `/dev/llama-dgpu-card` links (podman would split the `by-path` colons as
+  `src:dst` separators) on every start. Re-run puppet if a PCIe device is
+  added or moved: slot numbers can change, and the unit bakes in whatever the
+  fact saw at apply time.

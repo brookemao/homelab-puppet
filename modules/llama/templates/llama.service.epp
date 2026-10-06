@@ -9,6 +9,7 @@
   String  $backend,
   String  $reasoning_effort,
   String  $memory_limit,
+  String  $vulkan_pci_id,
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 # Mirrors homelab-llama test settings (Qwen3.8 thinking-mode preset,
@@ -31,6 +32,14 @@ After=network-online.target
 
 [Service]
 Type=simple
+<% if $backend == 'vulkan' { -%>
+# by-path names contain colons, which podman would split as src:dst
+# separators -- so resolve them to colon-free stable links first. Rebuilt on
+# every start from the discovered-or-default dGPU slot, hence immune to card
+# renumbering across reboots.
+ExecStartPre=/bin/ln -sfT /dev/dri/by-path/pci-<%= $vulkan_pci_id %>-render /dev/llama-dgpu-render
+ExecStartPre=/bin/ln -sfT /dev/dri/by-path/pci-<%= $vulkan_pci_id %>-card /dev/llama-dgpu-card
+<% } -%>
 ExecStart=<%= $podman_command %> run --rm \
   --name=<%= $container_name %> \
   --memory=<%= $memory_limit %> \
@@ -41,10 +50,10 @@ ExecStart=<%= $podman_command %> run --rm \
   --ipc=host \
   -e LD_LIBRARY_PATH=/opt/rocm/lib \
 <% } else { -%>
-  --device=/dev/dri \
+  --device=/dev/llama-dgpu-render:/dev/dri/renderD128 \
+  --device=/dev/llama-dgpu-card:/dev/dri/card0 \
   --group-add=video \
   --ipc=host \
-  -e GGML_VK_VISIBLE_DEVICES=1 \
 <% } -%>
   -p 127.0.0.1:<%= $port %>:8080 \
   -v <%= $models_dir %>:<%= $models_dir %>:ro \
