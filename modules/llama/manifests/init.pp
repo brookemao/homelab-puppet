@@ -35,7 +35,7 @@
 #   Defaults to "localhost/llama-${backend}:latest" when undef; set explicitly
 #   to pin a tag or use a custom build.
 # @param reasoning_effort Thinking effort passed to the chat template.
-# @param memory_limit RAM the container may use, e.g. '10g'. Caps llama-server
+# @param memory_limit RAM the container may use, e.g. '12g'. Caps llama-server
 #   so a runaway allocation fails inside the container instead of OOMing the host.
 # @param vulkan_pci_id Explicit dGPU PCI slot override (e.g. '0000:03:00.0').
 #   Defaults to the llama_dgpu_pci fact (Navi 48 lookup), else '0000:03:00.0'.
@@ -59,7 +59,7 @@ class llama (
   Integer[1, 65535]    $port                  = 8080,
   Optional[String[1]]  $image                 = undef,
   String[1]            $reasoning_effort      = 'xhigh',
-  Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '10g',
+  Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '12g',
   Optional[Pattern[/\A[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9]\z/]] $vulkan_pci_id = undef,
   String[1]            $searxng_mcp_url       = 'https://websearch.brookemao.ca/mcp',
   Sensitive[String[1]] $searxng_bearer_token,
