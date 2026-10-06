@@ -20,10 +20,9 @@
 # headers.
 #
 # Prerequisites Puppet does NOT provide: the container image built into rootful
-# podman storage (build with sudo in homelab-llama so root sees it; the unit
-# passes --pull=never and fails if it is missing), the GPU devices
-# (/dev/kfd + /dev/dri for rocm, /dev/dri for vulkan), and the model file
-# under $models_dir.
+# podman storage (build with sudo in homelab-llama so root sees it), the GPU
+# devices (/dev/kfd + /dev/dri for rocm, /dev/dri for vulkan), and the model
+# file under $models_dir.
 #
 # @param backend GPU backend: 'rocm' passes /dev/kfd + /dev/dri with the
 #   ROCm library path; 'vulkan' passes only /dev/dri. Selects the default
@@ -36,6 +35,8 @@
 #   Defaults to "localhost/llama-${backend}:latest" when undef; set explicitly
 #   to pin a tag or use a custom build.
 # @param reasoning_effort Thinking effort passed to the chat template.
+# @param memory_limit RAM the container may use, e.g. '16g'. Caps llama-server
+#   so a runaway allocation fails inside the container instead of OOMing the host.
 # @param searxng_mcp_url Public MCP endpoint the Web UI connects to (through the proxy).
 # @param searxng_bearer_token Bearer token for the public MCP endpoint; same
 #   secret as searxng::auth_token (homelab passes the shared lookup through).
@@ -52,6 +53,7 @@ class llama (
   Integer[1, 65535]    $port                  = 8080,
   Optional[String[1]]  $image                 = undef,
   String[1]            $reasoning_effort      = 'xhigh',
+  Pattern[/\A\d+(\.\d+)?([bkmgBKMG]|[kKmMgG][bB])?\z/] $memory_limit = '16g',
   String[1]            $searxng_mcp_url       = 'https://websearch.brookemao.ca/mcp',
   Sensitive[String[1]] $searxng_bearer_token,
   Llama::Absolutepath  $install_dir           = '/opt/llama-app',
@@ -112,6 +114,7 @@ class llama (
       'image'            => $real_image,
       'backend'          => $backend,
       'reasoning_effort' => $reasoning_effort,
+      'memory_limit'     => $memory_limit,
     }),
     notify  => Exec["${service_name}-daemon-reload"],
   }
