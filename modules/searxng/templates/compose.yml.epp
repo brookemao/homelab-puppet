@@ -1,6 +1,7 @@
 <%- |
   String  $version,
   String  $mcp_version,
+  String  $memory_limit,
   Integer $port,
   String  $settings_file,
   String  $auth_token,
@@ -9,6 +10,18 @@
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 name: searxng
+
+# podman-compose puts every service in a pod (pod_searxng), so limiting the
+# pod caps the three containers collectively rather than each one
+# individually (same pattern as the immich module).
+# pod_args REPLACES podman-compose's defaults, so --infra=false and --share=
+# are repeated here deliberately - dropping them would change how the stack
+# is networked.
+x-podman:
+  pod_args:
+    - --infra=false
+    - --share=
+    - --memory=<%= $memory_limit %>
 
 services:
   searxng:
