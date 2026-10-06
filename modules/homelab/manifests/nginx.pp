@@ -274,10 +274,10 @@ class homelab::nginx (
   # http_cache_port_t -- 8080 ships that way in Fedora policy, and 8081 is
   # relabeled below to match (same pattern as cockpit.pp's port management) --
   # so one rule serves both, and a second module would be byte-identical.
-  # Provides `semanage`/`semodule`. ensure_packages (not plain packages):
+  # Provides `semanage`/`semodule`. stdlib::ensure_packages (not plain packages):
   # homelab::cockpit declares these too, and duplicate package resources fail
   # the catalog.
-  ensure_packages(['policycoreutils', 'policycoreutils-python-utils'])
+  stdlib::ensure_packages(['policycoreutils', 'policycoreutils-python-utils'])
 
   # Shared with homelab::cockpit's module file; the guard keeps whichever
   # class parses second from redeclaring it.

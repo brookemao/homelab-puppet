@@ -8,6 +8,7 @@
   String  $image,
   String  $backend,
   String  $reasoning_effort,
+  String  $memory_limit,
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
 # Mirrors homelab-llama test settings (Qwen3.8 thinking-mode preset,
@@ -31,8 +32,8 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStart=<%= $podman_command %> run --rm \
-  --pull=never \
   --name=<%= $container_name %> \
+  --memory=<%= $memory_limit %> \
 <% if $backend == 'rocm' { -%>
   --device=/dev/kfd \
   --device=/dev/dri \

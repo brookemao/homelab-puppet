@@ -234,6 +234,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
 | `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
 | `reasoning_effort` | `String` | `'xhigh'` | Thinking effort passed to the chat template |
+| `memory_limit` | `String` | `'16g'` | RAM the container may use; over-allocation fails inside the container instead of OOMing the host |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
 | `install_dir` | `Llama::Absolutepath` | `'/opt/llama-app'` | Holds the generated `ui-config.json`, bind-mounted read-only into the container |
@@ -475,9 +476,7 @@ Prerequisites Puppet does not provide (first apply fails loudly without them):
   by default, or `localhost/llama-vulkan:latest` with `llama::backend: 'vulkan'`
   — build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)
   so it lands in rootful (system) storage where the root systemd unit can see
-  it (a user-storage build is invisible to the unit). The unit passes
-  `--pull=never`, so a missing image fails fast instead of attempting a
-  registry pull from `localhost`.
+  it (a user-storage build is invisible to the unit).
 - GPU devices `/dev/kfd` and `/dev/dri` (ROCm) or `/dev/dri` (Vulkan) on the host.
 - The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q6_K.gguf`.
 
