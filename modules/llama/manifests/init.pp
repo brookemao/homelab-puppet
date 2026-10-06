@@ -1,7 +1,7 @@
 # @summary Runs llama.cpp llama-server via podman, with SearXNG MCP search tools.
 #
-# Mirrors the homelab-llama test-llama-local.sh settings (Qwen3.8 thinking-mode
-# sampling, ROCm GPU passthrough, q8_0 KV cache, draft-mtp speculation) with a
+# Mirrors the homelab-llama test settings (Qwen3.8 thinking-mode
+# sampling, GPU passthrough, q8_0 KV cache, draft-mtp speculation) with a
 # 131072-token context (1/2 of Qwen3 256k max, reduced to avoid OOM) and a 16 GiB host-RAM prompt cache (--cache-ram) so
 # concurrent users can reuse cached prompts. --parallel is left to llama.cpp to
 # manage concurrent requests automatically, -kvu forces the shared (unified)
@@ -19,14 +19,20 @@
 # Basic-auth-gated instance and matches how the upstream UI stores per-server
 # headers.
 #
-# Prerequisites Puppet does NOT provide: the $image image built into rootful
-# podman storage (homelab-llama build-llama-local.sh), the GPU devices
-# (/dev/kfd, /dev/dri), and the model file under $models_dir.
+# Prerequisites Puppet does NOT provide: the container image built into rootful
+# podman storage (homelab-llama build scripts), the GPU devices
+# (/dev/kfd + /dev/dri for rocm, /dev/dri for vulkan), and the model file
+# under $models_dir.
 #
+# @param backend GPU backend: 'rocm' passes /dev/kfd + /dev/dri with the
+#   ROCm library path; 'vulkan' passes only /dev/dri. Selects the default
+#   $image when $image is undef.
 # @param model GGUF basename under $models_dir, or an absolute container path.
 # @param models_dir Host directory holding GGUFs, mounted read-only at the same path.
 # @param port Host loopback port published for the HTTP endpoint.
 # @param image Container image (must already exist in rootful podman storage).
+#   Defaults to "localhost/llama-${backend}:latest" when undef; set explicitly
+#   to pin a tag or use a custom build.
 # @param reasoning_effort Thinking effort passed to the chat template.
 # @param searxng_mcp_url Public MCP endpoint the Web UI connects to (through the proxy).
 # @param searxng_bearer_token Bearer token for the public MCP endpoint; same
@@ -38,10 +44,11 @@
 # @param service_name Name of the systemd unit and of the container
 #
 class llama (
+  Enum['rocm', 'vulkan'] $backend            = 'rocm',
   String[1]            $model                 = 'Qwen3.8-27B-UD-Q6_K.gguf',
   Llama::Absolutepath  $models_dir            = '/home/llama/models',
   Integer[1, 65535]    $port                  = 8080,
-  String[1]            $image                 = 'localhost/llama-local:latest',
+  Optional[String[1]]  $image                 = undef,
   String[1]            $reasoning_effort      = 'xhigh',
   String[1]            $searxng_mcp_url       = 'https://websearch.brookemao.ca/mcp',
   Sensitive[String[1]] $searxng_bearer_token,
@@ -51,6 +58,10 @@ class llama (
   String[1]            $service_name          = 'llama',
 ) {
   $ui_config = "${install_dir}/ui-config.json"
+  $real_image = $image ? {
+    undef   => "localhost/llama-${backend}:latest",
+    default => $image,
+  }
   $model_path = $model =~ /^\// ? {
     true    => $model,
     default => "${models_dir}/${model}",
@@ -96,7 +107,8 @@ class llama (
       'models_dir'       => $models_dir,
       'model_path'       => $model_path,
       'ui_config'        => $ui_config,
-      'image'            => $image,
+      'image'            => $real_image,
+      'backend'          => $backend,
       'reasoning_effort' => $reasoning_effort,
     }),
     notify  => Exec["${service_name}-daemon-reload"],
