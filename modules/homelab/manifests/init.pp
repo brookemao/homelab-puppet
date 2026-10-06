@@ -109,8 +109,8 @@ class homelab (
   Class['homelab::podman'] -> Class['searxng']
 
   # 13. Run llama.cpp llama-server with SearXNG MCP web search. Needs the
-  # prebuilt localhost/llama-local image, GPU devices and a model file (see
-  # homelab-llama). Search reaches the MCP server over HTTPS at
+  # prebuilt localhost/llama-rocm (or llama-vulkan) image, GPU devices and a
+  # model file (see homelab-llama). Search reaches the MCP server over HTTPS at
   # websearch.brookemao.ca (pre-registered in --ui-config-file), so the
   # container has no dependency on the searxng stack. The Bearer token is the
   # same searxng::auth_token secret the websearch vhost checks.

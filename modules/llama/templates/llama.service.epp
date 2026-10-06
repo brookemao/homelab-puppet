@@ -6,11 +6,12 @@
   String  $model_path,
   String  $ui_config,
   String  $image,
+  String  $backend,
   String  $reasoning_effort,
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
-# Mirrors homelab-llama test-llama-local.sh (Qwen3.8 thinking-mode preset,
-# ROCm GPU passthrough) with a 131072-token context (1/2 of Qwen3 256k max,
+# Mirrors homelab-llama test settings (Qwen3.8 thinking-mode preset,
+# GPU passthrough) with a 131072-token context (1/2 of Qwen3 256k max,
 # reduced to avoid OOM)
 # and a 16 GiB host-RAM
 # prompt cache (--cache-ram, default 8 GiB) so concurrent users can reuse
@@ -31,11 +32,17 @@ After=network-online.target
 Type=simple
 ExecStart=<%= $podman_command %> run --rm \
   --name=<%= $container_name %> \
+<% if $backend == 'rocm' { -%>
   --device=/dev/kfd \
   --device=/dev/dri \
   --group-add=video \
   --ipc=host \
   -e LD_LIBRARY_PATH=/opt/rocm/lib \
+<% } else { -%>
+  --device=/dev/dri \
+  --group-add=video \
+  --ipc=host \
+<% } -%>
   -p 127.0.0.1:<%= $port %>:8080 \
   -v <%= $models_dir %>:<%= $models_dir %>:ro \
   -v <%= $ui_config %>:<%= $ui_config %>:ro,Z \

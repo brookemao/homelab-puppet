@@ -19,7 +19,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **cloudflared**: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) from Cloudflare's RPM repository, publishing `immich.iapark.dev` → Immich on `127.0.0.1:2283` with no inbound port. Remotely managed: the tunnel, its public hostname and the Zero Trust Access policy in front of it live in the Cloudflare dashboard; Puppet only runs the connector with the token from `data/secrets.yaml`. See [Cloudflare Tunnel](#cloudflare-tunnel).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 - **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
-- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm `llama-local` image (Qwen3.8 thinking-mode preset, 131072-token context, 16 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
+- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm (`localhost/llama-rocm`) or Vulkan (`localhost/llama-vulkan`) image (Qwen3.8 thinking-mode preset, 131072-token context, 16 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
 
 ### Known issues
 
@@ -228,10 +228,11 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
+| `backend` | `Enum['rocm', 'vulkan']` | `'rocm'` | GPU backend: `rocm` passes `/dev/kfd` + `/dev/dri` with the ROCm library path; `vulkan` passes only `/dev/dri`. Also selects the default `image` when `image` is unset |
 | `model` | `String` | `'Qwen3.8-27B-UD-Q6_K.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
 | `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
-| `image` | `String` | `'localhost/llama-local:latest'` | Must already exist in rootful podman storage (build it with [homelab-llama](https://github.com/brookemao/homelab-llama)) |
+| `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
 | `reasoning_effort` | `String` | `'xhigh'` | Thinking effort passed to the chat template |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
@@ -470,10 +471,10 @@ to end with a chat prompt that needs fresh information — discovery and
 
 Prerequisites Puppet does not provide (first apply fails loudly without them):
 
-- The `localhost/llama-local:latest` image in rootful podman storage — build
-  it with [homelab-llama](https://github.com/brookemao/homelab-llama)
-  (`build-llama-local.sh`).
-- GPU devices `/dev/kfd` and `/dev/dri` on the host.
+- The container image in rootful podman storage — `localhost/llama-rocm:latest`
+  by default, or `localhost/llama-vulkan:latest` with `llama::backend: 'vulkan'`
+  — build it with [homelab-llama](https://github.com/brookemao/homelab-llama).
+- GPU devices `/dev/kfd` and `/dev/dri` (ROCm) or `/dev/dri` (Vulkan) on the host.
 - The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q6_K.gguf`.
 
 Caveats:
