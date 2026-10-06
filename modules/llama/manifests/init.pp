@@ -20,7 +20,8 @@
 # headers.
 #
 # Prerequisites Puppet does NOT provide: the container image built into rootful
-# podman storage (homelab-llama build scripts), the GPU devices
+# podman storage (build with sudo in homelab-llama so root sees it; the unit
+# passes --pull=never and fails if it is missing), the GPU devices
 # (/dev/kfd + /dev/dri for rocm, /dev/dri for vulkan), and the model file
 # under $models_dir.
 #
@@ -30,7 +31,8 @@
 # @param model GGUF basename under $models_dir, or an absolute container path.
 # @param models_dir Host directory holding GGUFs, mounted read-only at the same path.
 # @param port Host loopback port published for the HTTP endpoint.
-# @param image Container image (must already exist in rootful podman storage).
+# @param image Container image (must already exist in rootful podman storage,
+#   e.g. via `sudo podman build` in homelab-llama).
 #   Defaults to "localhost/llama-${backend}:latest" when undef; set explicitly
 #   to pin a tag or use a custom build.
 # @param reasoning_effort Thinking effort passed to the chat template.
