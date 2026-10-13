@@ -4,7 +4,8 @@
 #
 # 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
 # 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password,
-#    SearXNG secret key, SearXNG MCP bearer token, llama Basic-auth password) and, whenever
+#    SearXNG secret key, SearXNG MCP bearer token, Crawl4AI MCP bearer token,
+#    llama Basic-auth password) and, whenever
 #    data/secrets.yaml lacks one, the optional Cloudflare Tunnel token
 # 3. Executes masterless run with sudo (`sudo puppet apply`)
 #
@@ -241,6 +242,36 @@ fi
 
 upsert_secret_line 'searxng::auth_token' "${BEARER_TOKEN}"
 unset BEARER_TOKEN
+
+# Bearer token for the Crawl4AI Cloud MCP server
+# (https://api.crawl4ai.com/mcp), pre-registered in llama's --ui-config-file
+# as the Authorization: Bearer header. Precedence: CRAWL4AI_AUTH_TOKEN
+# environment override, then the existing data/secrets.yaml value, otherwise
+# prompt (empty input is rejected - get a key from Crawl4AI Cloud).
+CRAWL4AI_TOKEN="${CRAWL4AI_AUTH_TOKEN:-}"
+if [[ -n "${CRAWL4AI_TOKEN// }" ]]; then
+    ok "Using Crawl4AI MCP bearer token from environment variable CRAWL4AI_AUTH_TOKEN."
+else
+    CRAWL4AI_TOKEN="$(read_secret 'llama::crawl4ai_bearer_token')"
+    if [[ -n "${CRAWL4AI_TOKEN}" ]]; then
+        ok "Crawl4AI MCP bearer token already present in data/secrets.yaml. Skipping prompt."
+    else
+        echo -n "Enter Crawl4AI MCP bearer token (hidden): "
+        read -r -s CRAWL4AI_TOKEN || true
+        echo ""
+
+        while [[ -z "${CRAWL4AI_TOKEN// }" ]]; do
+            warn "Crawl4AI MCP bearer token cannot be empty."
+            echo -n "Enter Crawl4AI MCP bearer token (hidden): "
+            read -r -s CRAWL4AI_TOKEN || true
+            echo ""
+        done
+        ok "Crawl4AI MCP bearer token captured."
+    fi
+fi
+
+upsert_secret_line 'llama::crawl4ai_bearer_token' "${CRAWL4AI_TOKEN}"
+unset CRAWL4AI_TOKEN
 
 # Password for the llama Basic-auth user (agentforce) on
 # llama.brookemao.ca. Only the SHA-512 crypt hash is stored, so the plaintext

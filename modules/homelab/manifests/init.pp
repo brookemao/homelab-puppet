@@ -77,6 +77,7 @@ class homelab (
   # to Sensitive.
   $searxng_auth_token = lookup('searxng::auth_token', Sensitive[String[1]], 'first')
   $llama_basic_password = lookup('llama::basic_auth_password', Sensitive[String[1]], 'first')
+  $crawl4ai_bearer_token = lookup('llama::crawl4ai_bearer_token', Sensitive[String[1]], 'first')
   class { 'homelab::nginx':
     cert_name             => $cloudflare_zone,
     manage_service        => $manage_services,
@@ -113,11 +114,15 @@ class homelab (
   # model file (see homelab-llama). Search reaches the MCP server over HTTPS at
   # websearch.brookemao.ca (pre-registered in --ui-config-file), so the
   # container has no dependency on the searxng stack. The Bearer token is the
-  # same searxng::auth_token secret the websearch vhost checks.
+  # same searxng::auth_token secret the websearch vhost checks. Page fetching
+  # reaches the Crawl4AI Cloud MCP server at api.crawl4ai.com (also
+  # pre-registered in --ui-config-file) with its own Bearer token
+  # (llama::crawl4ai_bearer_token).
   # Override with llama::* Hiera keys.
   class { 'llama':
-    manage_service       => $manage_services,
-    searxng_bearer_token => $searxng_auth_token,
+    manage_service        => $manage_services,
+    searxng_bearer_token  => $searxng_auth_token,
+    crawl4ai_bearer_token => $crawl4ai_bearer_token,
   }
   Class['homelab::podman'] -> Class['llama']
 
