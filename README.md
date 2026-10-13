@@ -19,7 +19,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **cloudflared**: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) from Cloudflare's RPM repository, publishing `immich.iapark.dev` → Immich on `127.0.0.1:2283` with no inbound port. Remotely managed: the tunnel, its public hostname and the Zero Trust Access policy in front of it live in the Cloudflare dashboard; Puppet only runs the connector with the token from `data/secrets.yaml`. See [Cloudflare Tunnel](#cloudflare-tunnel).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 - **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
-- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm (`localhost/llama-rocm`) or Vulkan (`localhost/llama-vulkan`) image (Qwen3.8 thinking-mode preset, 131072-token context, 8 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set for first-time Web UI visitors, and the browser calls it directly — no CORS proxy.
+- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm (`localhost/llama-rocm`) or Vulkan (`localhost/llama-vulkan`) image (Qwen3.8 thinking-mode preset, 131072-token context, 8 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS and page fetching from Crawl4AI Cloud: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set and `https://api.crawl4ai.com/mcp` (with its own Bearer token) as a `crawl4ai_*` tool set for first-time Web UI visitors, and the browser calls both directly — no CORS proxy.
 
 ### Known issues
 
@@ -75,11 +75,12 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 The easiest way to bootstrap and configure a fresh Fedora 44 machine is using `bootstrap/bootstrap.sh`. It automatically:
 1. Installs the official Vox Pupuli OpenVox repository (`openvox8-release-fedora-44.noarch.rpm`) and `openvox-agent` via DNF with sudo.
 2. Securely prompts for secrets (Cloudflare API key/token, Immich database
-   password, SearXNG secret key, llama Basic-auth password) — or reads Cloudflare
-   from `CLOUDFLARE_API_KEY`, SearXNG from `SEARXNG_SECRET_KEY` and the llama
+   password, SearXNG secret key, Crawl4AI MCP bearer token, llama Basic-auth
+   password) — or reads Cloudflare from `CLOUDFLARE_API_KEY`, SearXNG from
+   `SEARXNG_SECRET_KEY`, Crawl4AI from `CRAWL4AI_AUTH_TOKEN` and the llama
    password from `LLAMA_BASIC_PASSWORD`. Empty SearXNG input auto-generates
-   a random key, and the MCP bearer token (`searxng::auth_token`, 32 bytes) is
-   always auto-generated unless `SEARXNG_AUTH_TOKEN` is set.
+   a random key, and the SearXNG MCP bearer token (`searxng::auth_token`,
+   32 bytes) is always auto-generated unless `SEARXNG_AUTH_TOKEN` is set.
 3. Saves the token to `data/secrets.yaml` (mode `0660`, gitignored).
 4. Executes masterless apply with sudo (`sudo puppet apply`).
 
@@ -154,6 +155,12 @@ This project uses standard Hiera 5 data lookups.
   # The bootstrap script generates this automatically.
   searxng::auth_token: 'your_searxng_mcp_bearer_token_here'
 
+  # Bearer token for the Crawl4AI Cloud MCP server
+  # (https://api.crawl4ai.com/mcp), pre-registered in llama's
+  # --ui-config-file. The bootstrap script prompts for this (or reads
+  # CRAWL4AI_AUTH_TOKEN).
+  llama::crawl4ai_bearer_token: 'your_crawl4ai_mcp_bearer_token_here'
+
   # SHA-512 crypt hash of the llama Basic-auth password (user `agentforce`).
   # The bootstrap script prompts for the password and stores only the hash.
   llama::basic_auth_password: 'your_llama_basic_auth_password_hash_here'
@@ -220,9 +227,10 @@ sensibly.
 
 ### `llama`
 
-Set these with `llama::<name>` Hiera keys. Only `searxng_bearer_token` is
-required — bootstrap collects it into `data/secrets.yaml` (as
-`searxng::auth_token`, shared with the searxng module); the rest default
+Set these with `llama::<name>` Hiera keys. `searxng_bearer_token` and
+`crawl4ai_bearer_token` are required — bootstrap collects the former into
+`data/secrets.yaml` (as `searxng::auth_token`, shared with the searxng module)
+and the latter as `llama::crawl4ai_bearer_token`; the rest default
 sensibly. The Basic-auth password for the public vhost lives under the
 `llama::basic_auth_password` Hiera key (SHA-512 crypt hash, collected by
 bootstrap) and is consumed by `homelab::nginx`, not this class.
@@ -239,6 +247,8 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | `vulkan_pci_id` | `Optional[String]` | `undef` | Explicit dGPU PCI slot override (e.g. `'0000:03:00.0'`); defaults to the `llama_dgpu_pci` fact (Navi 48 lookup), else `'0000:03:00.0'`. The unit resolves that slot's stable `/dev/dri/by-path` symlinks at each start into `/dev/llama-dgpu-render` and `/dev/llama-dgpu-card` (mapped to `renderD128`/`card0`) |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
+| `crawl4ai_mcp_url` | `String` | `'https://api.crawl4ai.com/mcp'` | Crawl4AI Cloud MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
+| `crawl4ai_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint (`Authorization: Bearer` header) |
 | `install_dir` | `Llama::Absolutepath` | `'/opt/llama-app'` | Holds the generated `ui-config.json`, bind-mounted read-only into the container |
 
 Everything the containers persist lives under `base_dir/data` in a fixed layout, which is what
@@ -447,8 +457,8 @@ Caveats:
 ## Managing Llama
 
 Puppet writes a systemd unit at `/etc/systemd/system/llama.service` plus the
-Web UI defaults at `/opt/llama-app/ui-config.json` (mode `0600`, carries the
-MCP Bearer token), then enables the unit. The unit runs `podman run` in the
+Web UI defaults at `/opt/llama-app/ui-config.json` (mode `0600`, carries both
+MCP Bearer tokens), then enables the unit. The unit runs `podman run` in the
 foreground (no compose file — a single container), so logs flow straight to
 the journal.
 
@@ -463,12 +473,16 @@ The HTTP endpoint (Web UI, OpenAI-compatible API) listens on loopback port
 `8080` and is public at `https://llama.brookemao.ca` behind HTTP Basic auth
 (user `agentforce`; bootstrap prompts for the password and stores only its
 SHA-512 crypt hash as `llama::basic_auth_password`). The SearXNG tools show up
-as `searxng_*` in the Web UI and `GET /tools`: first-time visitors get the
-`https://websearch.brookemao.ca/mcp` server pre-registered from
-`--ui-config-file` (url + Bearer header, direct browser calls), and the MCP
+as `searxng_*` and the Crawl4AI tools as `crawl4ai_*` in the Web UI and
+`GET /tools`: first-time visitors get the `https://websearch.brookemao.ca/mcp`
+server pre-registered from `--ui-config-file` (url + Bearer header, direct
+browser calls), and the MCP
 server's CORS allowlist (`MCP_HTTP_ALLOWED_ORIGINS`, set to the llama origin
 by the searxng module) is what permits those calls — llama-server itself needs
-no CORS configuration since the UI is same-origin with it. Verify search end
+no CORS configuration since the UI is same-origin with it. The
+`https://api.crawl4ai.com/mcp` server is pre-registered the same way (url +
+Bearer header from `llama::crawl4ai_bearer_token`, direct browser calls).
+Verify search end
 to end with a chat prompt that needs fresh information — discovery and
 `/health` alone don't prove the tool path works.
 
@@ -496,12 +510,14 @@ Caveats:
   sequences instead of per-slot buffers.
 - **`--sleep-idle-seconds 600` is passed.** The model unloads after 10
   minutes idle and reloads on the next request.
-- **The Bearer token is baked into the browser-side defaults.** Anyone who can
-  log in to the Web UI can read it from their own browser storage — acceptable
+- **The Bearer tokens are baked into the browser-side defaults.** Anyone who can
+  log in to the Web UI can read them from their own browser storage — acceptable
   for a private, Basic-auth-gated instance, and it matches how the upstream UI
-  stores per-server headers. Rotating it means updating `searxng::auth_token`
+  stores per-server headers. Rotating the SearXNG token means updating
+  `searxng::auth_token`
   (restarts the searxng stack, reloads nginx) and re-applying so llama picks
-  up the new `--ui-config-file` (restarts llama-server).
+  up the new `--ui-config-file` (restarts llama-server); rotating the Crawl4AI
+  token means updating `llama::crawl4ai_bearer_token` and re-applying.
 - **llama has no dependency on the searxng stack.** The browser reaches the
   MCP server over public HTTPS at chat time, so either side can restart
   independently and the container needs no special egress. Puppet still

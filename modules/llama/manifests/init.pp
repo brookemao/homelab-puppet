@@ -1,4 +1,4 @@
-# @summary Runs llama.cpp llama-server via podman, with SearXNG MCP search tools.
+# @summary Runs llama.cpp llama-server via podman, with SearXNG + Crawl4AI MCP tools.
 #
 # Mirrors the homelab-llama test settings (Qwen3.8 thinking-mode
 # sampling, GPU passthrough, q8_0 KV cache, draft-mtp speculation) with a
@@ -8,13 +8,14 @@
 # KV cache. --sleep-idle-seconds unloads the
 # model after 10 minutes idle.
 #
-# The SearXNG MCP server is attached through the Web UI: --ui-config-file
-# pre-registers it for first-time visitors (url + Bearer header, direct
-# browser calls, no proxy). The MCP server is publicly routable at
+# The SearXNG and Crawl4AI MCP servers are attached through the Web UI:
+# --ui-config-file
+# pre-registers them for first-time visitors (url + Bearer header, direct
+# browser calls, no proxy). The SearXNG MCP server is publicly routable at
 # websearch.brookemao.ca, so its own CORS allowlist
 # (MCP_HTTP_ALLOWED_ORIGINS, set by the searxng module to the llama origin)
 # is what lets the browser call it; llama-server needs no CORS configuration
-# since the UI is same-origin with it. The token is baked into the
+# since the UI is same-origin with it. Both tokens are baked into the
 # browser-side default config, which is acceptable for a private,
 # Basic-auth-gated instance and matches how the upstream UI stores per-server
 # headers.
@@ -47,6 +48,10 @@
 # @param searxng_bearer_token Bearer token for the public MCP endpoint; same
 #   secret as searxng::auth_token (homelab passes the shared lookup through).
 #   No default - without it nothing can authenticate to websearch.brookemao.ca.
+# @param crawl4ai_mcp_url Public Crawl4AI MCP endpoint the Web UI connects to.
+# @param crawl4ai_bearer_token Bearer token for the Crawl4AI MCP endpoint
+#   (Authorization: Bearer header). No default - get one from Crawl4AI Cloud.
+#   (homelab passes the shared lookup through).
 # @param install_dir Directory holding the generated ui-config.json (bind-mounted read-only).
 # @param podman_command Absolute path to podman (systemd ExecStart needs a full path)
 # @param manage_service Whether to enable and start the systemd unit
@@ -63,6 +68,8 @@ class llama (
   Optional[Pattern[/\A[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9]\z/]] $vulkan_pci_id = undef,
   String[1]            $searxng_mcp_url       = 'https://websearch.brookemao.ca/mcp',
   Sensitive[String[1]] $searxng_bearer_token,
+  String[1]            $crawl4ai_mcp_url      = 'https://api.crawl4ai.com/mcp',
+  Sensitive[String[1]] $crawl4ai_bearer_token,
   Llama::Absolutepath  $install_dir           = '/opt/llama-app',
   Llama::Absolutepath  $podman_command        = '/usr/bin/podman',
   Boolean              $manage_service        = true,
@@ -94,7 +101,7 @@ class llama (
     ensure => directory,
   }
 
-  # ui-config carries the Bearer token, so keep it root-only and hide it from
+  # ui-config carries both Bearer tokens, so keep it root-only and hide it from
   # reports. It lands read-only in the container; llama-server serves it as
   # first-visit defaults.
   file { $ui_config:
@@ -105,6 +112,8 @@ class llama (
     content => Sensitive(epp('llama/ui-config.json.epp', {
       'searxng_mcp_url'      => $searxng_mcp_url,
       'searxng_bearer_token' => $searxng_bearer_token,
+      'crawl4ai_mcp_url'     => $crawl4ai_mcp_url,
+      'crawl4ai_bearer_token'=> $crawl4ai_bearer_token,
     })),
     require => File[$install_dir],
   }

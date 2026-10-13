@@ -21,11 +21,12 @@
 # requests automatically; -kvu forces the shared (unified) KV cache.
 # --sleep-idle-seconds unloads the model after 10
 # minutes idle. Web search comes from the SearXNG MCP server over
-# public HTTPS: --ui-config-file pre-registers it (url + Bearer header) for
-# first-time visitors, and the browser calls it directly -- no CORS proxy,
+# public HTTPS and page fetching from Crawl4AI Cloud: --ui-config-file
+# pre-registers both (url + Bearer header) for
+# first-time visitors, and the browser calls them directly -- no CORS proxy,
 # no container network to the searxng stack.
 [Unit]
-Description=llama.cpp server with SearXNG MCP web search (podman)
+Description=llama.cpp server with SearXNG + Crawl4AI MCP tools (podman)
 Documentation=https://github.com/ggml-org/llama.cpp
 Wants=network-online.target
 After=network-online.target

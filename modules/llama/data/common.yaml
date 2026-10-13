@@ -5,5 +5,7 @@
 lookup_options:
   llama::searxng_bearer_token:
     convert_to: "Sensitive"
+  llama::crawl4ai_bearer_token:
+    convert_to: "Sensitive"
   llama::basic_auth_password:
     convert_to: "Sensitive"

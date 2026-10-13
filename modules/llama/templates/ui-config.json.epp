@@ -1,7 +1,9 @@
 <%- |
   String[1] $searxng_mcp_url,
   Sensitive[String[1]] $searxng_bearer_token,
+  String[1] $crawl4ai_mcp_url,
+  Sensitive[String[1]] $crawl4ai_bearer_token,
 | -%>
 {
-  "mcpServers": "[{\"id\":\"searxng\",\"name\":\"searxng\",\"url\":\"<%= $searxng_mcp_url %>\",\"enabled\":true,\"useProxy\":false,\"headers\":\"{\\\"Authorization\\\":\\\"Bearer <%= $searxng_bearer_token.unwrap %>\\\"}\"}]"
+  "mcpServers": "[{\"id\":\"searxng\",\"name\":\"searxng\",\"url\":\"<%= $searxng_mcp_url %>\",\"enabled\":true,\"useProxy\":false,\"headers\":\"{\\\"Authorization\\\":\\\"Bearer <%= $searxng_bearer_token.unwrap %>\\\"}\"},{\"id\":\"crawl4ai\",\"name\":\"crawl4ai\",\"url\":\"<%= $crawl4ai_mcp_url %>\",\"enabled\":true,\"useProxy\":false,\"headers\":\"{\\\"Authorization\\\":\\\"Bearer <%= $crawl4ai_bearer_token.unwrap %>\\\"}\"}]"
 }
