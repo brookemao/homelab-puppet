@@ -30,6 +30,8 @@
 #   $vulkan_pci_id). Selects the default $image when $image is undef.
 # @param model GGUF basename under $models_dir, or an absolute container path.
 # @param models_dir Host directory holding GGUFs, mounted read-only at the same path.
+# @param mmproj Vision encoder GGUF basename under $models_dir, or an absolute
+#   container path. Passed as --mmproj; undef disables vision support.
 # @param port Host loopback port published for the HTTP endpoint.
 # @param image Container image (must already exist in rootful podman storage,
 #   e.g. via `sudo podman build` in homelab-llama).
@@ -61,6 +63,7 @@ class llama (
   Enum['rocm', 'vulkan'] $backend            = 'rocm',
   String[1]            $model                 = 'Qwen3.8-27B-UD-Q6_K.gguf',
   Llama::Absolutepath  $models_dir            = '/home/llama/models',
+  Optional[String[1]]  $mmproj                = undef,
   Integer[1, 65535]    $port                  = 8080,
   Optional[String[1]]  $image                 = undef,
   String[1]            $reasoning_effort      = 'xhigh',
@@ -86,6 +89,13 @@ class llama (
   $model_path = $model =~ /^\// ? {
     true    => $model,
     default => "${models_dir}/${model}",
+  }
+  $mmproj_path = $mmproj ? {
+    undef   => undef,
+    default => $mmproj =~ /^\// ? {
+      true    => $mmproj,
+      default => "${models_dir}/${mmproj}",
+    },
   }
 
   file { $install_dir:
@@ -129,6 +139,7 @@ class llama (
       'port'             => $port,
       'models_dir'       => $models_dir,
       'model_path'       => $model_path,
+      'mmproj_path'      => $mmproj_path,
       'ui_config'        => $ui_config,
       'image'            => $real_image,
       'backend'          => $backend,

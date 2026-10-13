@@ -5,7 +5,7 @@
 # 1. Installs OpenVox Agent (`openvox-agent`) via DNF with sudo from Vox Pupuli repositories
 # 2. Prompts for required secrets (Cloudflare API Key for ddclient, Immich database password,
 #    SearXNG secret key, SearXNG MCP bearer token, Crawl4AI MCP bearer token,
-#    llama Basic-auth password) and, whenever
+#    llama Basic-auth password) and generates the llama API keys, and, whenever
 #    data/secrets.yaml lacks one, the optional Cloudflare Tunnel token
 # 3. Executes masterless run with sudo (`sudo puppet apply`)
 #
@@ -109,7 +109,7 @@ else
     echo "------------------------------------------------------------"
     echo " Cloudflare Dynamic DNS Configuration for ddclient          "
     echo " Target zone:    brookemao.ca                               "
-    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca, photos.brookemao.ca, cockpit.brookemao.ca, llama.brookemao.ca, websearch.brookemao.ca"
+    echo " Domains:        homelab.brookemao.ca, mindustry.brookemao.ca, photos.brookemao.ca, cockpit.brookemao.ca, llama.brookemao.ca, llama-api.brookemao.ca, websearch.brookemao.ca"
     echo "------------------------------------------------------------"
     echo -n "Enter Cloudflare API Key / Token (hidden): "
     read -r -s CF_KEY
@@ -185,6 +185,44 @@ upsert_secret_line() {
 # whole script from inside the $(...) assignment.
 read_secret() {
     sed -n "s/^[[:space:]]*$1:[[:space:]]*['\"]\?\([^'\"]*\)['\"]\?[[:space:]]*$/\1/p" "${SECRETS_FILE}" 2>/dev/null | head -n 1 || true
+}
+
+# read_secret_sub <parent-key> <sub-key>: print the value of a nested key
+# under a top-level mapping in data/secrets.yaml (without surrounding
+# quotes), or nothing when absent. Never fails (see read_secret).
+read_secret_sub() {
+    sed -n "/^[[:space:]]*$1:[[:space:]]*$/,/^[^[:space:]]/p" "${SECRETS_FILE}" 2>/dev/null \
+        | sed -n "s/^[[:space:]]*$2:[[:space:]]*['\"]\?\([^'\"]*\)['\"]\?[[:space:]]*$/\1/p" | head -n 1 || true
+}
+
+# upsert_secret_hash_key <parent-key> <sub-key> <value>: ensure
+# data/secrets.yaml holds "<parent-key>:\n  <sub-key>: '<value>'" -- creating
+# the parent mapping, appending the sub-key, or updating it when it differs
+# (e.g. explicit environment override). Same quoting rules as
+# upsert_secret_line.
+upsert_secret_hash_key() {
+    local parent="$1"
+    local sub="$2"
+    local value="$3"
+    local value_yaml="${value//\'/\'\'}"
+    local value_sed
+    value_sed="$(printf '%s' "${value_yaml}" | sed 's/[&|\\]/\\&/g')"
+
+    mkdir -p "${PROJECT_ROOT}/data"
+    if [[ ! -f "${SECRETS_FILE}" ]]; then
+        printf '%s\n' '---' "${parent}:" "  ${sub}: '${value_yaml}'" > "${SECRETS_FILE}"
+        ok "Saved ${parent} ${sub} to ${SECRETS_FILE} (mode 0660)."
+    elif ! grep -q "^[[:space:]]*${parent}:[[:space:]]*$" "${SECRETS_FILE}"; then
+        printf '%s\n' "${parent}:" "  ${sub}: '${value_yaml}'" >> "${SECRETS_FILE}"
+        ok "Saved ${parent} ${sub} to ${SECRETS_FILE} (mode 0660)."
+    elif ! grep -q "^[[:space:]]*${sub}:" "${SECRETS_FILE}"; then
+        sed -i "/^[[:space:]]*${parent}:[[:space:]]*$/a\\  ${sub}: '${value_yaml}'" "${SECRETS_FILE}"
+        ok "Saved ${parent} ${sub} to ${SECRETS_FILE} (mode 0660)."
+    elif ! grep -qF -- "  ${sub}: '${value_yaml}'" "${SECRETS_FILE}"; then
+        sed -i "s|^[[:space:]]*${sub}:.*|  ${sub}: '${value_sed}'|" "${SECRETS_FILE}"
+        ok "Updated ${parent} ${sub} in ${SECRETS_FILE}."
+    fi
+    sudo chmod 660 "${SECRETS_FILE}"
 }
 
 SEARXNG_SECRET="${SEARXNG_SECRET_KEY:-}"
@@ -310,6 +348,35 @@ fi
 
 upsert_secret_line 'llama::basic_auth_password' "${LLAMA_BASIC_HASH}"
 unset LLAMA_BASIC_HASH
+
+# API keys guarding the llama API vhost (llama-api.brookemao.ca), one per
+# client label, sent as `Authorization: Bearer <key>`. 32 bytes each,
+# base64-encoded. Precedence per label: LLAMA_API_KEY_<LABEL> environment
+# override, then the existing data/secrets.yaml value, otherwise generate
+# with `openssl rand -base64 32`.
+for _label_upper in BROOKE IZZY GENERAL; do
+    _label="$(printf '%s' "${_label_upper}" | tr 'A-Z' 'a-z')"
+    _env_var="LLAMA_API_KEY_${_label_upper}"
+    _api_key="${!_env_var:-}"
+    if [[ -n "${_api_key// }" ]]; then
+        ok "Using llama API key '${_label}' from environment variable ${_env_var}."
+    else
+        _api_key="$(read_secret_sub 'homelab::nginx::llama_api_keys' "${_label}")"
+        if [[ -n "${_api_key}" ]]; then
+            ok "llama API key '${_label}' already present in data/secrets.yaml. Skipping generation."
+        else
+            if command -v openssl &>/dev/null; then
+                _api_key="$(openssl rand -base64 32 | tr -d '\n')"
+            else
+                _api_key="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+            fi
+            ok "Generated random llama API key '${_label}' (32 bytes, base64)."
+        fi
+    fi
+    upsert_secret_hash_key 'homelab::nginx::llama_api_keys' "${_label}" "${_api_key}"
+    unset _api_key
+done
+unset _label_upper _label _env_var
 
 # Cloudflare Tunnel token for immich.iapark.dev (homelab::cloudflared), copied from
 # the Zero Trust dashboard (see "Cloudflare Tunnel" in the README). Optional, and

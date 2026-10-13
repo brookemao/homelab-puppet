@@ -19,7 +19,7 @@ class homelab (
   String[1] $ddclient_release_tag    = 'latest',
   String[1] $cloudflare_token        = '<SECRET TOKEN HERE>',
   String[1] $cloudflare_zone         = 'brookemao.ca',
-  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca',
+  String[1] $cloudflare_domains      = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca',
   Boolean   $ddclient_replace_config = false,
   Optional[String[1]] $acme_email    = undef,
 ) {

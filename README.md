@@ -12,7 +12,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **fail2ban**: Intrusion prevention service configured for systemd journal logging and Firewalld rich rules integration, including an Immich failed-login jail (10 failures in 10 min → 24 h ban), a Cockpit failed-login jail (5 failures in 10 min → 1 h ban, doubling per repeat offense up to 48 h), and `llama` / `websearch` jails counting HTTP 401s in each nginx vhost's dedicated access log (5 failures in 10 min → 1 h ban). Check them with `sudo fail2ban-client status llama` / `status websearch`; if a jail reports no log file after a fresh apply, confirm nginx created `/var/log/nginx/llama-access.log` and `/var/log/nginx/websearch-access.log`, and check `sudo ausearch -m avc -ts recent` in case SELinux blocks fail2ban from reading them.
 - **firewalld**: Firewall service managed via `puppet-firewalld` with ports `443/tcp` and `9090/tcp` (Cockpit) allowed in the managed zone (`public` by default, pinned as the system default zone so the rules land on Fedora's active `FedoraServer`/`FedoraWorkstation` zone), plus direct `OUTPUT` rules confining the `nginx` workers to localhost egress (`NEW` connections only, so `ESTABLISHED` replies still flow; matched on the pre-DNAT original destination so locally-published container ports stay reachable). Any permanent firewall change triggers a `firewalld --reload`, which flushes podman DNS — so `homelab::firewall` notifies `immich`, `searxng` and `llama` to restart (see `docs/firewalld-podman-immich.md`).
 - **podman**: Container runtime with `podman-compose` for compose workloads. Container storage uses the `overlay` driver with `graphroot` relocated to `/home/containers/storage` (SELinux-labeled) instead of the `/var/lib` default.
-- **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); `websearch.brookemao.ca` forwards to the SearXNG MCP server on loopback `8081` gated by a Bearer token; `llama.brookemao.ca` forwards to llama-server on loopback `8080` gated by HTTP Basic auth (`agentforce`); all other hosts hit the catch-all default page. (Immich is not proxied by nginx — it is published through the Cloudflare Tunnel instead.) SELinux least privilege, same pattern as Cockpit: a minimal `nginx_backends` allow module lets the workers reach both loopback backends (TCP `8081` is relabeled to the policy-shipped `http_cache_port_t` to match `8080`), no `httpd_can_network_connect`.
+- **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); `websearch.brookemao.ca` forwards to the SearXNG MCP server on loopback `8081` gated by a Bearer token; `llama.brookemao.ca` forwards to llama-server on loopback `8080` gated by HTTP Basic auth (`agentforce`); `llama-api.brookemao.ca` forwards to the same llama-server on loopback `8080` gated by per-client API keys (`brooke`, `izzy`, `general`); all other hosts hit the catch-all default page. (Immich is not proxied by nginx — it is published through the Cloudflare Tunnel instead.) SELinux least privilege, same pattern as Cockpit: a minimal `nginx_backends` allow module lets the workers reach both loopback backends (TCP `8081` is relabeled to the policy-shipped `http_cache_port_t` to match `8080`), no `httpd_can_network_connect`.
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
@@ -133,7 +133,7 @@ This project uses standard Hiera 5 data lookups.
   homelab::ddclient_install_method: 'package'
   homelab::ddclient_release_tag: 'latest'
   homelab::cloudflare_zone: 'brookemao.ca'
-  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca'
+  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca'
   homelab::ddclient_replace_config: false
   ```
 
@@ -165,6 +165,15 @@ This project uses standard Hiera 5 data lookups.
   # The bootstrap script prompts for the password and stores only the hash.
   llama::basic_auth_password: 'your_llama_basic_auth_password_hash_here'
 
+  # Per-client API keys for the llama API vhost (llama-api.brookemao.ca),
+  # sent as `Authorization: Bearer <key>`. 32 bytes each, base64-encoded
+  # (`openssl rand -base64 32`). The bootstrap script generates any missing
+  # key automatically.
+  homelab::nginx::llama_api_keys:
+    brooke: 'your_llama_api_key_brooke_here'
+    izzy: 'your_llama_api_key_izzy_here'
+    general: 'your_llama_api_key_general_here'
+
   # Optional. See "Cloudflare Tunnel" below.
   homelab::cloudflared::tunnel_token: 'your_tunnel_token_here'
   ```
@@ -187,7 +196,7 @@ This project uses standard Hiera 5 data lookups.
 | `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag past 4.0.0) or specific tag (e.g. `'v4.0.0'`) |
 | `cloudflare_token` | `String` | `'<SECRET TOKEN HERE>'` | Cloudflare API Token for dynamic DNS updates |
 | `cloudflare_zone` | `String` | `'brookemao.ca'` | Cloudflare root domain zone |
-| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca'` | Subdomains to update |
+| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca'` | Subdomains to update |
 | `ddclient_replace_config` | `Boolean` | `false` | Whether to overwrite existing `/etc/ddclient/ddclient.conf` |
 
 ### `immich`
@@ -239,6 +248,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 |---|---|---|---|
 | `backend` | `Enum['rocm', 'vulkan']` | `'rocm'` | GPU backend: `rocm` passes `/dev/kfd` + `/dev/dri` with the ROCm library path; `vulkan` passes only the single dGPU (see `vulkan_pci_id`). Also selects the default `image` when `image` is unset |
 | `model` | `String` | `'Qwen3.8-27B-UD-Q6_K.gguf'` | GGUF basename under `models_dir`, or an absolute container path |
+| `mmproj` | `Optional[String]` | `undef` | Vision encoder GGUF basename under `models_dir`, or an absolute container path; passed as `--mmproj` when set |
 | `models_dir` | `Llama::Absolutepath` | `'/home/llama/models'` | Host model directory, mounted read-only at the same path. Only the directory itself is ensured; its parent must already exist |
 | `port` | `Integer[1, 65535]` | `8080` | Host loopback port published for the HTTP endpoint |
 | `image` | `Optional[String]` | `undef` (`'localhost/llama-rocm:latest'` when `backend` is `rocm`, `'localhost/llama-vulkan:latest'` when `vulkan`) | Container image; must already exist in rootful podman storage (build it with `sudo` via [homelab-llama](https://github.com/brookemao/homelab-llama)). Set explicitly to pin a tag or use a custom build |
@@ -287,7 +297,7 @@ zone=brookemao.ca,            \
 ttl=1,                      \
 login=token,    \
 password=<SECRET TOKEN HERE> \
-homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,websearch.brookemao.ca
+homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca
 ```
 
 1. If you ran without supplying a token, update the secret in `/etc/ddclient/ddclient.conf`:
@@ -472,7 +482,13 @@ sudo podman logs llama            # same logs via podman
 The HTTP endpoint (Web UI, OpenAI-compatible API) listens on loopback port
 `8080` and is public at `https://llama.brookemao.ca` behind HTTP Basic auth
 (user `agentforce`; bootstrap prompts for the password and stores only its
-SHA-512 crypt hash as `llama::basic_auth_password`). The SearXNG tools show up
+SHA-512 crypt hash as `llama::basic_auth_password`). The same endpoint is
+also public at `https://llama-api.brookemao.ca` behind per-client API-key
+auth (`Authorization: Bearer <key>`, one key per label under
+`homelab::nginx::llama_api_keys`; bootstrap generates each missing key with
+`openssl rand -base64 32`), for programmatic OpenAI-compatible API use
+without the browser UI. The client key is stripped before proxying since the
+backend runs without `--api-key`. The SearXNG tools show up
 as `searxng_*` and the Crawl4AI tools as `crawl4ai_*` in the Web UI and
 `GET /tools`: first-time visitors get the `https://websearch.brookemao.ca/mcp`
 server pre-registered from `--ui-config-file` (url + Bearer header, direct
@@ -495,6 +511,8 @@ Prerequisites Puppet does not provide (first apply fails loudly without them):
   it (a user-storage build is invisible to the unit).
 - GPU devices `/dev/kfd` and `/dev/dri` (ROCm) or `/dev/dri` (Vulkan) on the host.
 - The model file, e.g. `/home/llama/models/Qwen3.8-27B-UD-Q6_K.gguf`.
+- The vision encoder file, e.g. `/home/llama/models/Qwen3.8-27B-mmproj-BF16.gguf`
+  (required when `llama::mmproj` is set).
 
 Caveats:
 
