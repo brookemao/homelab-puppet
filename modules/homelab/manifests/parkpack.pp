@@ -12,7 +12,7 @@
 # @param seltype SELinux type every file presents as; undef omits context=
 # @param options Further mount options
 class homelab::parkpack (
-  String[1]             $device     = 'UUID=30f84cda-08f8-4b2c-bf33-6c89d4c1dbf6',
+  String[1]             $device     = 'UUID=0436ccf9-3784-4551-8097-115bac8cf3d3',
   String[1]             $fstype     = 'xfs',
   Stdlib::Absolutepath  $mountpoint = '/mnt/parkpack',
   Optional[Integer[0]]  $uid        = undef,
