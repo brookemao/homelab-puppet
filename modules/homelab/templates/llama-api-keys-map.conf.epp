@@ -1,0 +1,22 @@
+<%- |
+  Hash[String[1], String[1]] $api_keys,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+# Lives in conf.d, which nginx.conf includes inside http {} -- a map block is
+# only valid there, not inside a location. This file carries the API keys, so
+# it is mode 0600 root:nginx (the master reads config as root); the vhost file
+# stays world-readable.
+#
+# The key combines method and credentials. Unlike the websearch vhost there is
+# no CORS bypass here: API clients always send Authorization by design, so
+# every method needs an exact key match and anything else fails closed.
+# Exact keys only, so any key characters are safe.
+map "$request_method:$http_authorization" $llama_api_authorized {
+  default 0;
+<% $api_keys.each |$label, $key| { -%>
+  # <%= $label %>
+  "GET:Bearer <%= $key %>" 1;
+  "POST:Bearer <%= $key %>" 1;
+  "DELETE:Bearer <%= $key %>" 1;
+<% } -%>
+}

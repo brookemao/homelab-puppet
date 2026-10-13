@@ -32,6 +32,12 @@
       Integer $websearch_findtime,
       String  $websearch_port,
       String  $websearch_logpath,
+      Boolean $llama_api_enabled,
+      Integer $llama_api_maxretry,
+      Integer $llama_api_bantime,
+      Integer $llama_api_findtime,
+      String  $llama_api_port,
+      String  $llama_api_logpath,
 | -%>
 # /etc/fail2ban/jail.local
 # Managed by OpenVox - manual edits will be overwritten
@@ -132,4 +138,19 @@ maxretry = <%= $websearch_maxretry %>
 bantime  = <%= $websearch_bantime %>
 findtime = <%= $websearch_findtime %>
 logpath  = <%= $websearch_logpath %>
+<% } -%>
+
+<% if $llama_api_enabled { -%>
+# llama-api API-key failures: 5 failures in 10 minutes -> 1 hour ban.
+# Counts 401s in the llama-api vhost's dedicated nginx access log.
+[llama-api]
+enabled  = true
+port     = <%= $llama_api_port %>
+filter   = llama-api
+# Never ban localhost (also covered by [DEFAULT] ignoreip)
+ignoreip = 127.0.0.1/8 ::1
+maxretry = <%= $llama_api_maxretry %>
+bantime  = <%= $llama_api_bantime %>
+findtime = <%= $llama_api_findtime %>
+logpath  = <%= $llama_api_logpath %>
 <% } -%>

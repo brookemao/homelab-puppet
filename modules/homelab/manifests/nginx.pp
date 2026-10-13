@@ -3,8 +3,10 @@
 # Requests for cockpit.brookemao.ca are forwarded to Cockpit on 9090 and
 # require an mTLS client certificate signed by the personal PKI root.
 # Requests for websearch.brookemao.ca are forwarded to the SearXNG MCP server
-# on 8081 gated by a Bearer token, and llama.brookemao.ca to llama-server on
-# 8080 gated by HTTP Basic auth. Requests for any other host fall through to
+# on 8081 gated by a Bearer token, llama.brookemao.ca to llama-server on
+# 8080 gated by HTTP Basic auth, and llama-api.brookemao.ca to the same
+# llama-server on 8080 gated by per-client API keys. Requests for any other
+# host fall through to
 # the catch-all default server serving the stock nginx page. (The former
 # photos/Immich forwarding was removed to keep Immich off the internet.)
 #
@@ -36,6 +38,15 @@
 # @param llama_access_log Dedicated access log for the llama vhost, so the
 #   fail2ban llama jail can count Basic-auth 401s without matching other
 #   vhosts' traffic
+# @param llama_api_server_name Host name for the API-key-gated llama vhost
+# @param llama_api_keys Per-client API keys (label => key) gating the
+#   llama-api vhost; bootstrap generates one `openssl rand -base64 32` key
+#   per label and saves the hash in secrets.yaml
+# @param llama_api_keys_map_path 0600 file holding the key-checking map (http context)
+# @param llama_api_key_check_path Location-level include rejecting missing keys
+# @param llama_api_access_log Dedicated access log for the llama-api vhost, so
+#   the fail2ban llama-api jail can count 401s without matching other
+#   vhosts' traffic
 # @param selinux_backends_module_name Name of the custom SELinux allow module
 #   letting nginx reach the llama and websearch backend ports (one module:
 #   both ports share the http_cache_port_t label, so the rule is identical)
@@ -66,6 +77,11 @@ class homelab::nginx (
   String[1]            $llama_htpasswd_path         = '/etc/nginx/llama.htpasswd',
   String[1]            $llama_access_log            = '/var/log/nginx/llama-access.log',
   String[1]            $llama_splash_message        = 'llama.cpp',
+  String[1]            $llama_api_server_name      = 'llama-api.brookemao.ca',
+  Sensitive[Hash[String[1], String[1]]] $llama_api_keys,
+  String[1]            $llama_api_keys_map_path    = '/etc/nginx/conf.d/llama-api-keys-map.conf',
+  String[1]            $llama_api_key_check_path   = '/etc/nginx/llama-api-key-check.conf',
+  String[1]            $llama_api_access_log       = '/var/log/nginx/llama-api-access.log',
   String[1]            $selinux_backends_module_name  = 'nginx_backends',
   String[1]            $selinux_policy_dir            = '/usr/local/share/selinux',
 ) {
@@ -265,6 +281,71 @@ class homelab::nginx (
       'Authorization ""',
     ],
     require                => File[$llama_htpasswd_path],
+  }
+
+  # ---- llama.cpp behind API-key auth (llama-api.brookemao.ca) ----
+  # Same llama-server backend as llama.brookemao.ca, gated by per-client API
+  # keys (Authorization: Bearer) instead of Basic auth, for programmatic
+  # OpenAI-compatible API use. Keys live in the 0600 map (http context);
+  # the location only includes the token-free check file. The client
+  # Authorization header is stripped before proxying: the backend runs
+  # without --api-key, so forwarding keys would only leak them into
+  # backend logs. No CORS bypass: API clients always send credentials, so
+  # every method needs an exact key match (fail closed).
+  file { $llama_api_keys_map_path:
+    ensure  => file,
+    owner   => 'root',
+    group   => 'nginx',
+    mode    => '0600',
+    content => Sensitive(epp('homelab/llama-api-keys-map.conf.epp', {
+      'api_keys' => $llama_api_keys.unwrap,
+    })),
+    require => File["${nginx::conf_dir}/conf.d"],
+    notify  => Class['nginx::service'],
+  }
+
+  file { $llama_api_key_check_path:
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    content => epp('homelab/llama-api-key-check.conf.epp', {}),
+    require => File[$nginx::conf_dir],
+    notify  => Class['nginx::service'],
+  }
+
+  nginx::resource::server { 'llama-api-reverse-proxy':
+    ensure              => present,
+    server_name         => [$llama_api_server_name],
+    listen_port         => $listen_port,
+    ssl_port            => $listen_port,
+    ssl                 => $ssl,
+    ssl_cert            => $ssl_cert,
+    ssl_key             => $ssl_key,
+    access_log          => $llama_api_access_log,
+    proxy               => "http://127.0.0.1:${llama_backend_port}",
+    proxy_http_version  => '1.1',
+    proxy_buffering     => 'off',
+    # SSE chat streams idle between tokens; 10m keeps API clients alive
+    # through long thinking runs.
+    proxy_read_timeout  => '10m',
+    proxy_set_header    => [
+      'Host $host',
+      'X-Real-IP $remote_addr',
+      'X-Forwarded-For $proxy_add_x_forwarded_for',
+      'X-Forwarded-Proto $scheme',
+      'Authorization ""',
+    ],
+    location_cfg_append => {
+      'include' => $llama_api_key_check_path,
+    },
+    require             => [
+      File[$llama_api_keys_map_path],
+      File[$llama_api_key_check_path],
+    ],
+    # NOTE: the secret files above require only nginx's own directories, never
+    # Class['nginx'] itself -- that would cycle via this define's internal
+    # notify to nginx::service (same reason as the cockpit/default vhosts).
   }
 
   # ---- SELinux: let nginx reach the loopback backends ----

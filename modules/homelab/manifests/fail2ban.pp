@@ -41,6 +41,14 @@
 # @param websearch_port Ports guarded by the websearch jail (default: http,https)
 # @param websearch_logpath Access log file the websearch jail tails (written by the
 #   websearch nginx vhost; fail2ban must apply after nginx so it exists)
+# @param llama_api_enabled Whether to enable the llama-api API-key jail (counts
+#   401s in the llama-api vhost's dedicated nginx access log)
+# @param llama_api_maxretry Failed llama-api authorizations before banning (default: 5)
+# @param llama_api_bantime llama-api ban duration in seconds (default: 3600 = 1 hour)
+# @param llama_api_findtime Time window in seconds to count llama-api failures (default: 600 = 10 min)
+# @param llama_api_port Ports guarded by the llama-api jail (default: http,https)
+# @param llama_api_logpath Access log file the llama-api jail tails (written by the
+#   llama-api nginx vhost; fail2ban must apply after nginx so it exists)
 class homelab::fail2ban (
   String[1] $ensure         = 'installed',
   Boolean   $manage_service = true,
@@ -79,6 +87,12 @@ class homelab::fail2ban (
   Integer   $websearch_findtime = 600,
   String[1] $websearch_port     = 'http,https',
   String[1] $websearch_logpath = '/var/log/nginx/websearch-access.log',
+  Boolean   $llama_api_enabled  = true,
+  Integer   $llama_api_maxretry = 5,
+  Integer   $llama_api_bantime  = 3600,
+  Integer   $llama_api_findtime = 600,
+  String[1] $llama_api_port     = 'http,https',
+  String[1] $llama_api_logpath = '/var/log/nginx/llama-api-access.log',
 ) {
   $packages = [
     'fail2ban',
@@ -132,6 +146,12 @@ class homelab::fail2ban (
         'websearch_findtime'  => $websearch_findtime,
         'websearch_port'      => $websearch_port,
         'websearch_logpath'   => $websearch_logpath,
+        'llama_api_enabled'   => $llama_api_enabled,
+        'llama_api_maxretry'  => $llama_api_maxretry,
+        'llama_api_bantime'   => $llama_api_bantime,
+        'llama_api_findtime'  => $llama_api_findtime,
+        'llama_api_port'      => $llama_api_port,
+        'llama_api_logpath'   => $llama_api_logpath,
       }),
       require => Package[$packages],
       notify  => Service['fail2ban'],
@@ -173,6 +193,16 @@ class homelab::fail2ban (
       group   => 'root',
       mode    => '0644',
       source  => 'puppet:///modules/homelab/fail2ban-websearch-filter.conf',
+      require => Package[$packages],
+      notify  => Service['fail2ban'],
+    }
+
+    file { '/etc/fail2ban/filter.d/llama-api.conf':
+      ensure  => file,
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0644',
+      source  => 'puppet:///modules/homelab/fail2ban-llama-api-filter.conf',
       require => Package[$packages],
       notify  => Service['fail2ban'],
     }
