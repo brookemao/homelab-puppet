@@ -13,7 +13,7 @@
 # @param options Further mount options
 class homelab::parkpack (
   String[1]             $device     = 'UUID=30f84cda-08f8-4b2c-bf33-6c89d4c1dbf6',
-  String[1]             $fstype     = 'ext4',
+  String[1]             $fstype     = 'xfs',
   Stdlib::Absolutepath  $mountpoint = '/mnt/parkpack',
   Optional[Integer[0]]  $uid        = undef,
   Optional[Integer[0]]  $gid        = undef,
