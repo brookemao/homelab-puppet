@@ -19,7 +19,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **cloudflared**: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) from Cloudflare's RPM repository, publishing `immich.iapark.dev` → Immich on `127.0.0.1:2283` with no inbound port. Remotely managed: the tunnel, its public hostname and the Zero Trust Access policy in front of it live in the Cloudflare dashboard; Puppet only runs the connector with the token from `data/secrets.yaml`. See [Cloudflare Tunnel](#cloudflare-tunnel).
 - **Immich**: Self-hosted [photo and video server](https://immich.app) deployed as a `podman-compose` stack (server, machine learning, Valkey, PostgreSQL) running under a dedicated `immich` system account, supervised by a systemd unit so the stack returns after a reboot.
 - **SearXNG**: Self-hosted metasearch ([SearXNG](https://docs.searxng.org)) plus the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server, deployed as a `podman-compose` stack (SearXNG, Valkey, MCP server) supervised by a systemd unit so the stack returns after a reboot. Only the MCP HTTP endpoint is published, on loopback port `8081`; SearXNG itself stays on the container network.
-- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm (`localhost/llama-rocm`) or Vulkan (`localhost/llama-vulkan`) image (Qwen3.8 thinking-mode preset, 131072-token context, 8 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS and page fetching from Crawl4AI Cloud: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set and `https://api.crawl4ai.com/mcp` (with its own Bearer token) as a `crawl4ai_*` tool set for first-time Web UI visitors, and the browser calls both directly — no CORS proxy.
+- **llama**: [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on the ROCm (`localhost/llama-rocm`) or Vulkan (`localhost/llama-vulkan`) image (Qwen3.8 thinking-mode preset, 131072-token context, 8 GiB host-RAM prompt cache), supervised by a systemd unit so it returns after a reboot. Only the HTTP endpoint is published, on loopback port `8080`. Web search comes from the SearXNG MCP server over public HTTPS and page fetching from Crawl4AI Cloud: a `--ui-config-file` pre-registers `https://websearch.brookemao.ca/mcp` (with the Bearer token) as a `searxng_*` tool set and `https://api.crawl4ai.com/mcp` (with its own Bearer token) as a `crawl4ai_*` tool set for first-time Web UI visitors. SearXNG is called directly from the browser (its CORS allowlist permits the llama origin); Crawl4AI goes through llama-server's `--ui-mcp-proxy` (`useProxy:true`) because its third-party CORS headers do not permit the llama origin.
 
 ### Known issues
 
@@ -257,7 +257,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | `vulkan_pci_id` | `Optional[String]` | `undef` | Explicit dGPU PCI slot override (e.g. `'0000:03:00.0'`); defaults to the `llama_dgpu_pci` fact (Navi 48 lookup), else `'0000:03:00.0'`. The unit resolves that slot's stable `/dev/dri/by-path` symlinks at each start into `/dev/llama-dgpu-render` and `/dev/llama-dgpu-card` (mapped to `renderD128`/`card0`) |
 | `searxng_mcp_url` | `String` | `'https://websearch.brookemao.ca/mcp'` | Public MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
-| `crawl4ai_mcp_url` | `String` | `'https://api.crawl4ai.com/mcp'` | Crawl4AI Cloud MCP endpoint pre-registered in `--ui-config-file`; the browser calls it directly |
+| `crawl4ai_mcp_url` | `String` | `'https://api.crawl4ai.com/mcp'` | Crawl4AI Cloud MCP endpoint pre-registered in `--ui-config-file` with `useProxy:true` (via llama-server `--ui-mcp-proxy`; direct browser calls fail its third-party CORS check) |
 | `crawl4ai_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint (`Authorization: Bearer` header) |
 | `install_dir` | `Llama::Absolutepath` | `'/opt/llama-app'` | Holds the generated `ui-config.json`, bind-mounted read-only into the container |
 
@@ -496,8 +496,14 @@ browser calls), and the MCP
 server's CORS allowlist (`MCP_HTTP_ALLOWED_ORIGINS`, set to the llama origin
 by the searxng module) is what permits those calls — llama-server itself needs
 no CORS configuration since the UI is same-origin with it. The
-`https://api.crawl4ai.com/mcp` server is pre-registered the same way (url +
-Bearer header from `llama::crawl4ai_bearer_token`, direct browser calls).
+`https://api.crawl4ai.com/mcp` server is pre-registered with `useProxy:true`
+(url + Bearer header from `llama::crawl4ai_bearer_token`, reached through
+llama-server's `--ui-mcp-proxy`): direct browser calls fail because
+api.crawl4ai.com is third-party and its CORS response does not allow the
+llama origin, and the Bearer `Authorization` header triggers a preflight
+the browser blocks. No nginx change fixes that — CORS is enforced by the
+upstream response, so the request must avoid cross-origin browser fetch
+via the server-side proxy instead.
 Verify search end
 to end with a chat prompt that needs fresh information — discovery and
 `/health` alone don't prove the tool path works.
