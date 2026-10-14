@@ -10,12 +10,18 @@
 #
 # The SearXNG and Crawl4AI MCP servers are attached through the Web UI:
 # --ui-config-file
-# pre-registers them for first-time visitors (url + Bearer header, direct
-# browser calls, no proxy). The SearXNG MCP server is publicly routable at
+# pre-registers them for first-time visitors (url + Bearer header).
+# The SearXNG MCP server is publicly routable at
 # websearch.brookemao.ca, so its own CORS allowlist
 # (MCP_HTTP_ALLOWED_ORIGINS, set by the searxng module to the llama origin)
-# is what lets the browser call it; llama-server needs no CORS configuration
-# since the UI is same-origin with it. Both tokens are baked into the
+# is what lets the browser call it directly (useProxy:false);
+# llama-server needs no CORS configuration
+# since the UI is same-origin with it. Crawl4AI Cloud
+# (api.crawl4ai.com) is third-party: its CORS headers do not permit the
+# llama origin, and a Bearer Authorization header triggers a preflight the
+# browser blocks -- so it is registered with useProxy:true and reached
+# through llama-server's --ui-mcp-proxy instead of direct browser calls.
+# Both tokens are baked into the
 # browser-side default config, which is acceptable for a private,
 # Basic-auth-gated instance and matches how the upstream UI stores per-server
 # headers.
@@ -50,7 +56,9 @@
 # @param searxng_bearer_token Bearer token for the public MCP endpoint; same
 #   secret as searxng::auth_token (homelab passes the shared lookup through).
 #   No default - without it nothing can authenticate to websearch.brookemao.ca.
-# @param crawl4ai_mcp_url Public Crawl4AI MCP endpoint the Web UI connects to.
+# @param crawl4ai_mcp_url Crawl4AI Cloud MCP endpoint pre-registered in
+#   --ui-config-file with useProxy:true (reached through llama-server's
+#   --ui-mcp-proxy; direct browser calls fail its third-party CORS check).
 # @param crawl4ai_bearer_token Bearer token for the Crawl4AI MCP endpoint
 #   (Authorization: Bearer header). No default - get one from Crawl4AI Cloud.
 #   (homelab passes the shared lookup through).

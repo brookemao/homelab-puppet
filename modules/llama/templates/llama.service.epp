@@ -24,8 +24,11 @@
 # minutes idle. Web search comes from the SearXNG MCP server over
 # public HTTPS and page fetching from Crawl4AI Cloud: --ui-config-file
 # pre-registers both (url + Bearer header) for
-# first-time visitors, and the browser calls them directly -- no CORS proxy,
-# no container network to the searxng stack.
+# first-time visitors. SearXNG is called directly from the browser
+# (its CORS allowlist permits the llama origin); Crawl4AI is a third-party
+# host whose CORS headers we cannot control, so it is reached through
+# llama-server's --ui-mcp-proxy (useProxy:true) instead -- no container
+# network to the searxng stack.
 [Unit]
 Description=llama.cpp server with SearXNG + Crawl4AI MCP tools (podman)
 Documentation=https://github.com/ggml-org/llama.cpp
@@ -90,6 +93,7 @@ ExecStart=<%= $podman_command %> run --rm \
   --repeat-penalty 1.0 \
   --chat-template-kwargs '{"reasoning_effort":"<%= $reasoning_effort %>"}' \
   --sleep-idle-seconds 600 \
+  --ui-mcp-proxy \
   --ui-config-file <%= $ui_config %>
 ExecStop=<%= $podman_command %> stop -t 30 <%= $container_name %>
 Restart=always
