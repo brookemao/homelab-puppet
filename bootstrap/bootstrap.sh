@@ -179,6 +179,15 @@ upsert_secret_line() {
     sudo chmod 660 "${SECRETS_FILE}"
 }
 
+# 32 random bytes, hex-encoded (safe in YAML, HTTP headers and SQL literals)
+gen_hex_secret() {
+    if command -v openssl &>/dev/null; then
+        openssl rand -hex 32
+    else
+        head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n'
+    fi
+}
+
 # read_secret <key>: print the current data/secrets.yaml value for a key
 # (without surrounding quotes), or nothing when the key is absent. Never
 # fails: with `set -e -o pipefail` a missing file would otherwise abort the
@@ -238,11 +247,7 @@ else
         echo ""
 
         if [[ -z "${SEARXNG_SECRET// }" ]]; then
-            if command -v openssl &>/dev/null; then
-                SEARXNG_SECRET="$(openssl rand -hex 32)"
-            else
-                SEARXNG_SECRET="$(head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n')"
-            fi
+            SEARXNG_SECRET="$(gen_hex_secret)"
             ok "Generated random SearXNG secret key."
         else
             ok "SearXNG secret key captured."
@@ -269,17 +274,33 @@ else
     if [[ -n "${BEARER_TOKEN}" ]]; then
         ok "SearXNG MCP bearer token already present in data/secrets.yaml. Skipping generation."
     else
-        if command -v openssl &>/dev/null; then
-            BEARER_TOKEN="$(openssl rand -hex 32)"
-        else
-            BEARER_TOKEN="$(head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n')"
-        fi
+        BEARER_TOKEN="$(gen_hex_secret)"
         ok "Generated random SearXNG MCP bearer token (32 bytes)."
     fi
 fi
 
 upsert_secret_line 'searxng::auth_token' "${BEARER_TOKEN}"
 unset BEARER_TOKEN
+
+# Password for the read-only Immich Postgres role (immich_ro). Setting it is
+# what publishes Postgres on loopback. Precedence: IMMICH_DB_READONLY_PASSWORD
+# environment override, then the existing data/secrets.yaml value, otherwise
+# generate. Hex keeps it safe inside the SQL string literal and YAML alike.
+IMMICH_RO_PASSWORD="${IMMICH_DB_READONLY_PASSWORD:-}"
+if [[ -n "${IMMICH_RO_PASSWORD// }" ]]; then
+    ok "Using Immich read-only DB password from environment variable IMMICH_DB_READONLY_PASSWORD."
+else
+    IMMICH_RO_PASSWORD="$(read_secret 'immich::db_readonly_password')"
+    if [[ -n "${IMMICH_RO_PASSWORD}" ]]; then
+        ok "Immich read-only DB password already present in data/secrets.yaml. Skipping generation."
+    else
+        IMMICH_RO_PASSWORD="$(gen_hex_secret)"
+        ok "Generated random Immich read-only DB password (32 bytes)."
+    fi
+fi
+
+upsert_secret_line 'immich::db_readonly_password' "${IMMICH_RO_PASSWORD}"
+unset IMMICH_RO_PASSWORD
 
 # Bearer token for the Crawl4AI Cloud MCP server
 # (https://api.crawl4ai.com/mcp), pre-registered in llama's --ui-config-file
