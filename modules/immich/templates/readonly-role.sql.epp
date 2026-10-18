@@ -1,0 +1,50 @@
+<%- |
+  String $user,
+  String $password,
+  String $marker,
+| -%>
+-- Managed by Puppet. Local changes will be overwritten.
+-- Idempotent: safe to re-run.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '<%= $user %>') THEN
+    CREATE ROLE "<%= $user %>" LOGIN;
+  END IF;
+END
+$$;
+
+ALTER ROLE "<%= $user %>" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+  PASSWORD '<%= $password.regsubst("'", "''", 'G') %>';
+ALTER ROLE "<%= $user %>" SET default_transaction_read_only = on;
+-- Marks the role as Puppet's, so a renamed or disabled one can be found and dropped
+COMMENT ON ROLE "<%= $user %>" IS '<%= $marker %>';
+
+<%= epp('immich/readonly-drop.sql.epp', { 'marker' => $marker, 'keep' => $user }) -%>
+
+-- Earlier versions granted pg_read_all_data. It skips permission checks on system catalogs
+-- too, so it would expose pg_authid (the superuser's password hash); grant per schema instead.
+REVOKE pg_read_all_data FROM "<%= $user %>";
+
+-- SELECT on everything in every non-system schema that exists now...
+DO $$
+DECLARE s name;
+BEGIN
+  FOR s IN SELECT nspname FROM pg_namespace
+           WHERE nspname NOT IN ('pg_catalog', 'information_schema')
+             AND nspname NOT LIKE 'pg\_%' LOOP
+    EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', s, '<%= $user %>');
+    EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO %I', s, '<%= $user %>');
+    EXECUTE format('GRANT SELECT ON ALL SEQUENCES IN SCHEMA %I TO %I', s, '<%= $user %>');
+  END LOOP;
+END
+$$;
+
+-- ...and on whatever Immich's migrations (run as postgres) create later, in any schema
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT USAGE ON SCHEMAS TO "<%= $user %>";
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT SELECT ON TABLES TO "<%= $user %>";
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT SELECT ON SEQUENCES TO "<%= $user %>";
+
+-- Postgres 14 lets every role create objects in public and temp tables; take that away
+-- (Immich connects as the postgres superuser, which this does not affect)
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE TEMPORARY ON DATABASE immich FROM PUBLIC;

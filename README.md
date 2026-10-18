@@ -207,6 +207,9 @@ when no key is present, which is why `data/common.yaml` carries none of them.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `db_password` | `Sensitive[String]` | `Sensitive('immich')` | PostgreSQL password. Only read at database initialisation - see below |
+| `db_readonly_password` | `Optional[Sensitive[String]]` | `undef` | Password for the read-only role `db_readonly_user`. When set, PostgreSQL is published on `127.0.0.1:db_port` and the role is created; bootstrap generates it. See [Read-only database access](#read-only-database-access) |
+| `db_readonly_user` | `String` | `'immich_ro'` | Name of the read-only role. Renaming it drops the old one; `postgres`, `public`, `none` and `pg_*` are rejected |
+| `db_port` | `Integer[1, 65535]` | `5432` | Host loopback port PostgreSQL is published on when `db_readonly_password` is set |
 | `version` | `String` | `'v3.2.2'` | Immich image tag |
 | `timezone` | `String` | `'America/Los_Angeles'` | `TZ` passed to the containers |
 | `port` | `Integer[1, 65535]` | `2283` | Host port published for the web UI |
@@ -391,6 +394,44 @@ reachable from the host but not through firewalld from the LAN.
   `sudo podman logs immich_postgres` and `sudo ausearch -m avc -ts recent`.
 
 The first start pulls several GB of images; the unit allows 15 minutes for it.
+
+### Read-only database access
+
+Setting `immich::db_readonly_password` (bootstrap generates it) publishes PostgreSQL on
+`127.0.0.1:5432` and creates the `immich_ro` role, for tooling such as the
+[immich-tools](https://github.com/IAPark/immich-tools) devcontainer. The role gets `USAGE`
+and `SELECT` on every table, view and sequence in every non-system schema, plus default
+privileges so objects Immich's migrations create later are covered too. It deliberately
+does not get `pg_read_all_data`, which would also let it read `pg_authid` and so the
+superuser's password hash. It defaults to read-only transactions and has no create or
+temp-table rights: the SQL also revokes Postgres 14's default `CREATE` on `public` and
+`TEMPORARY` on the database from `PUBLIC`, which does not affect Immich (it connects as the
+`postgres` superuser).
+
+Puppet writes the SQL to `/opt/immich-app/readonly-role.sql` (mode `0600`) and runs it through
+`podman exec immich_postgres psql`, retrying for up to 5 minutes while Postgres starts. It
+records a hash of the applied SQL in `readonly-role.sql.applied` and runs again on any apply
+where that hash is stale or the role is missing, so a failed first run, a password rotation
+or a recreated database fix themselves. With `manage_service => false` it is skipped while
+`immich_postgres` isn't running, and since Puppet then doesn't restart the stack, turning the
+feature on or off only logs a warning that `systemctl restart immich` is needed before the
+port appears or goes away.
+
+Roles it creates carry a comment marking them as Puppet's. Renaming `db_readonly_user`
+drops the old role, and removing `immich::db_readonly_password` drops the role, deletes
+the SQL file and unpublishes the port (the `PUBLIC` revokes stay). Check it with:
+
+```bash
+PGPASSWORD="$(sudo awk -F"'" '/^immich::db_readonly_password:/ {print $2}' data/secrets.yaml)" \
+  psql -h 127.0.0.1 -U immich_ro -d immich -c '\dt'
+```
+
+Like the web UI port, `5432` is bound to loopback only, so it is reachable from the host
+(including `--network=host` containers) but not from the LAN. The `postgres` superuser
+can also log in over that port with `immich::db_password`, so the class refuses to compile
+while that is still the `'immich'` default. Postgres only reads it at initdb, so on an
+existing database run `ALTER USER postgres PASSWORD '...'` inside `immich_postgres` before
+changing `immich::db_password`.
 
 ### Resource limits
 

@@ -2,6 +2,7 @@
   String  $version,
   String  $timezone,
   String  $db_password,
+  Optional[Integer] $db_port,
   Integer $port,
   String  $upload_location,
   Array[String] $external_libraries,
@@ -110,6 +111,11 @@ services:
       DB_STORAGE_TYPE: SSD
     volumes:
       - <%= $db_location %>:/var/lib/postgresql/data
+<%- if $db_port { -%>
+    # Loopback only, for the read-only role (immich::db_readonly_password)
+    ports:
+      - "127.0.0.1:<%= $db_port %>:5432"
+<%- } -%>
     shm_size: 128mb
     restart: always
     healthcheck:

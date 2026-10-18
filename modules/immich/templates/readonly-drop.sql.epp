@@ -1,0 +1,17 @@
+<%- |
+  String           $marker,
+  Optional[String] $keep = undef,
+| -%>
+-- Drop read-only roles an earlier apply created (found by their marker comment)<% if $keep { %>,
+-- other than <%= $keep %><% } %>
+DO $$
+DECLARE r name;
+BEGIN
+  FOR r IN SELECT rolname FROM pg_roles
+           WHERE shobj_description(oid, 'pg_authid') = '<%= $marker %>'<% if $keep { %>
+             AND rolname <> '<%= $keep %>'<% } %> LOOP
+    EXECUTE format('DROP OWNED BY %I', r);
+    EXECUTE format('DROP ROLE %I', r);
+  END LOOP;
+END
+$$;

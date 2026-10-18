@@ -5,3 +5,5 @@
 lookup_options:
   immich::db_password:
     convert_to: "Sensitive"
+  immich::db_readonly_password:
+    convert_to: "Sensitive"

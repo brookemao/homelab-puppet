@@ -8,9 +8,17 @@
 # homelab::podman).
 #
 # @param db_password Postgres password. Override via the immich::db_password Hiera key.
-#   Postgres isn't exposed, but overriding this will help security
+#   Postgres is only published (on loopback) when db_readonly_password is set, and the
+#   postgres superuser can then log in over that port with this password, so override it.
 #   Postgres only reads this at initdb time, so changing it after the first boot will
 #   NOT re-key an existing database - the server container will then fail to authenticate.
+# @param db_readonly_password Password for a read-only Postgres role ($db_readonly_user).
+#   When set, Postgres is published on 127.0.0.1:$db_port and the role is created, or its
+#   password and grants updated, whenever the SQL changes or the role is missing. undef
+#   leaves Postgres unpublished and drops any role an earlier apply created. Override via
+#   immich::db_readonly_password.
+# @param db_readonly_user Name of the read-only role. Renaming it drops the old role.
+# @param db_port Host loopback port Postgres is published on when the read-only role is enabled
 # @param base_dir Directory the whole deployment lives under; created if missing. 
 # Its own parent must already exist (/home by default). Persistent data goes
 #   in $base_dir/data, and the SELinux rule is recursive over that - so anything placed
@@ -33,6 +41,9 @@
 #
 class immich (
   Sensitive[String[1]] $db_password     = Sensitive('immich'),
+  Optional[Sensitive[String[1]]] $db_readonly_password = undef,
+  Pattern[/\A(?!pg_|postgres\z|public\z|none\z)[a-z_][a-z0-9_]{0,62}\z/] $db_readonly_user = 'immich_ro',
+  Integer[1, 65535]    $db_port         = 5432,
   String[1]            $version         = 'v3.2.2',
   String[1]            $timezone        = 'America/Los_Angeles',
   Integer[1, 65535]    $port            = 2283,
@@ -129,6 +140,20 @@ class immich (
     require => File[$data_dir],
   }
 
+  # Postgres only gets a host port when there is a read-only role to use it with
+  $readonly_enabled  = $db_readonly_password != undef
+
+  # The postgres superuser can log in over that port too, so not with the well-known default
+  if $readonly_enabled and $db_password.unwrap == 'immich' {
+    fail(@("MSG"/L))
+      immich: db_readonly_password publishes Postgres on 127.0.0.1:${db_port}, where the \
+      postgres superuser can log in with db_password, so db_password must not be the 'immich' \
+      default. Set immich::db_password; on an existing database also run \
+      ALTER USER postgres PASSWORD '...' first, since Postgres only reads it at initdb.
+      | MSG
+  }
+  $published_db_port = $readonly_enabled ? { true => $db_port, default => undef }
+
   # Compose file contains the DB password, so keep it private and hide it from reports
   $compose_file = "${install_dir}/compose.yml"
 
@@ -141,6 +166,7 @@ class immich (
       'version'            => $version,
       'timezone'           => $timezone,
       'db_password'        => $db_password.unwrap,
+      'db_port'            => $published_db_port,
       'port'               => $port,
       'upload_location'    => $upload_location,
       'external_libraries' => $external_libraries,
@@ -179,6 +205,19 @@ class immich (
     refreshonly => true,
   }
 
+  if !$manage_service {
+    # Nothing applies a compose-file change (e.g. the Postgres port appearing or going away)
+    # until the stack is recreated, so say so in the run output rather than look finished
+    exec { "${service_name}-restart-required":
+      command     => "echo '${compose_file} changed; run systemctl restart ${service_name} to apply it'",
+      path        => ['/usr/bin', '/bin'],
+      refreshonly => true,
+      logoutput   => true,
+      loglevel    => 'warning',
+      subscribe   => File[$compose_file],
+    }
+  }
+
   if $manage_service {
     # Restarting on a compose-file change runs ExecStop then ExecStart, i.e. down then up
     service { $service_name:
@@ -193,6 +232,68 @@ class immich (
         File[$data_dirs],
         File[$db_location],
       ],
+    }
+  }
+
+  $readonly_sql   = "${install_dir}/readonly-role.sql"
+  $readonly_stamp = "${install_dir}/readonly-role.sql.applied"
+  # Role comment that identifies roles this class created, for renames and removal
+  $readonly_marker = 'puppet:immich::db_readonly_user'
+  $psql            = 'podman exec -i immich_postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d immich'
+  $postgres_running = 'podman container inspect -f "{{.State.Running}}" immich_postgres 2>/dev/null | grep -qx true'
+
+  # With manage_service the stack is started just before; otherwise nothing guarantees it is
+  # up, so skip (and retry on a later apply) rather than wait out the retries
+  $readonly_onlyif = $manage_service ? { true => undef, default => $postgres_running }
+  $stack           = $manage_service ? { true => [Service[$service_name]], default => [] }
+
+  if $readonly_enabled {
+    # The SQL carries the password, so it stays root-only and out of reports
+    file { $readonly_sql:
+      ensure  => file,
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0600',
+      content => Sensitive(epp('immich/readonly-role.sql.epp', {
+        'user'     => $db_readonly_user,
+        'password' => $db_readonly_password.unwrap,
+        'marker'   => $readonly_marker,
+      })),
+      require => File[$install_dir],
+    }
+
+    # Runs over the container's local socket (trust auth) as the postgres superuser. Not
+    # refreshonly: it runs until the stamp matches the current SQL and the role exists, so a
+    # failed first run, a rotated password or a wiped database all heal on the next apply.
+    # The retries cover `podman-compose up -d` returning before Postgres accepts connections.
+    exec { "${service_name}-readonly-role":
+      command   => "${psql} < ${readonly_sql} && sha256sum ${readonly_sql} > ${readonly_stamp}",
+      unless    => "sha256sum -c --status ${readonly_stamp} && ${psql} -tAc \"SELECT 1 FROM pg_roles WHERE rolname = '${db_readonly_user}'\" | grep -qx 1",
+      onlyif    => $readonly_onlyif,
+      provider  => 'shell',
+      path      => ['/usr/bin', '/bin'],
+      tries     => 30,
+      try_sleep => 10,
+      require   => [File[$readonly_sql]] + $stack,
+    }
+  } else {
+    file { [$readonly_sql, $readonly_stamp]:
+      ensure => absent,
+    }
+
+    # Drop any role an earlier apply created. Only when Postgres is running: on a later apply
+    # otherwise, rather than failing every apply while the stack is down.
+    $drop_roles = epp('immich/readonly-drop.sql.epp', { 'marker' => $readonly_marker })
+
+    exec { "${service_name}-readonly-role-absent":
+      command   => "${psql} <<'SQL'\n${drop_roles}SQL",
+      unless    => "${psql} -tAc \"SELECT count(*) FROM pg_roles WHERE shobj_description(oid, 'pg_authid') = '${readonly_marker}'\" | grep -qx 0",
+      onlyif    => $postgres_running,
+      provider  => 'shell',
+      path      => ['/usr/bin', '/bin'],
+      tries     => 30,
+      try_sleep => 10,
+      require   => $stack,
     }
   }
 }
