@@ -262,7 +262,7 @@ bootstrap) and is consumed by `homelab::nginx`, not this class.
 | `searxng_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint; same secret as `searxng::auth_token` |
 | `crawl4ai_mcp_url` | `String` | `'https://api.crawl4ai.com/mcp'` | Crawl4AI Cloud MCP endpoint pre-registered in `--ui-config-file` with `useProxy:true` (via llama-server `--ui-mcp-proxy`; direct browser calls fail its third-party CORS check) |
 | `crawl4ai_bearer_token` | `Sensitive[String]` | *(required)* | Bearer token for that endpoint (`Authorization: Bearer` header) |
-| `install_dir` | `Llama::Absolutepath` | `'/opt/llama-app'` | Holds the generated `ui-config.json`, bind-mounted read-only into the container |
+| `install_dir` | `Llama::Absolutepath` | `'/opt/llama-app'` | Holds `ui-config.json` and the bundled Sharp chat template, bind-mounted read-only into the container |
 
 Everything the containers persist lives under `base_dir/data` in a fixed layout, which is what
 lets a single SELinux rule and a single ownership scheme cover all of it:
@@ -563,6 +563,14 @@ Prerequisites Puppet does not provide (first apply fails loudly without them):
 
 Caveats:
 
+- **The [Qwen Sharp chat template](https://huggingface.co/peculiar-ragdoll/Qwen-Sharp-Chat-Templates) is managed by Puppet.**
+  The bundled v22.5.0 template replaces the model's embedded template through
+  `--jinja --chat-template-file`, with `--reasoning-format deepseek` and the
+  existing `reasoning_effort` setting. Its source revision and checksum are
+  recorded in `modules/llama/files/README.md`. Template changes restart the service.
+- **`--spec-type draft-mtp,ngram-mod` enables both speculative decoders.**
+  The existing `--spec-draft-n-max 3` setting is retained. The container image
+  must support both decoder types and comma-separated `--spec-type` values.
 - **`--ctx-size 131072` is passed.** This sets the context length to 131072
   tokens (1/2 of the 262144-token Qwen3 maximum, kept this low to avoid OOM);
   the KV cache uses the configured q8_0 cache types.

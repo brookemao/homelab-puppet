@@ -6,6 +6,7 @@
   String  $model_path,
   Optional[String] $mmproj_path,
   String  $ui_config,
+  String  $chat_template,
   String  $image,
   String  $backend,
   String  $reasoning_effort,
@@ -63,6 +64,7 @@ ExecStart=<%= $podman_command %> run --rm \
   -p 127.0.0.1:<%= $port %>:8080 \
   -v <%= $models_dir %>:<%= $models_dir %>:ro \
   -v <%= $ui_config %>:<%= $ui_config %>:ro,Z \
+  -v <%= $chat_template %>:<%= $chat_template %>:ro,Z \
   <%= $image %> \
   --model <%= $model_path %> \
 <% if $mmproj_path { -%>
@@ -83,7 +85,7 @@ ExecStart=<%= $podman_command %> run --rm \
   --cache-type-v q8_0 \
   --cache-ram 8192 \
   -kvu \
-  --spec-type draft-mtp \
+  --spec-type draft-mtp,ngram-mod \
   --spec-draft-n-max 3 \
   --temp 1.0 \
   --top-p 0.95 \
@@ -91,6 +93,9 @@ ExecStart=<%= $podman_command %> run --rm \
   --min-p 0.0 \
   --presence-penalty 0.0 \
   --repeat-penalty 1.0 \
+  --jinja \
+  --chat-template-file <%= $chat_template %> \
+  --reasoning-format deepseek \
   --chat-template-kwargs '{"reasoning_effort":"<%= $reasoning_effort %>"}' \
   --sleep-idle-seconds 600 \
   --ui-mcp-proxy \

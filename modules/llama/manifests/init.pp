@@ -1,7 +1,7 @@
 # @summary Runs llama.cpp llama-server via podman, with SearXNG + Crawl4AI MCP tools.
 #
 # Mirrors the homelab-llama test settings (Qwen3.8 thinking-mode
-# sampling, GPU passthrough, q8_0 KV cache, draft-mtp speculation) with a
+# sampling, GPU passthrough, q8_0 KV cache, draft-mtp + ngram-mod speculation) with a
 # 131072-token context (1/2 of Qwen3 256k max, reduced to avoid OOM) and a 8 GiB host-RAM prompt cache (--cache-ram) so
 # concurrent users can reuse cached prompts. --parallel is left to llama.cpp to
 # manage concurrent requests automatically, -kvu forces the shared (unified)
@@ -62,7 +62,7 @@
 # @param crawl4ai_bearer_token Bearer token for the Crawl4AI MCP endpoint
 #   (Authorization: Bearer header). No default - get one from Crawl4AI Cloud.
 #   (homelab passes the shared lookup through).
-# @param install_dir Directory holding the generated ui-config.json (bind-mounted read-only).
+# @param install_dir Directory holding ui-config.json and the Sharp chat template (bind-mounted read-only).
 # @param podman_command Absolute path to podman (systemd ExecStart needs a full path)
 # @param manage_service Whether to enable and start the systemd unit
 # @param service_name Name of the systemd unit and of the container
@@ -87,6 +87,7 @@ class llama (
   String[1]            $service_name          = 'llama',
 ) {
   $ui_config = "${install_dir}/ui-config.json"
+  $chat_template = "${install_dir}/qwen-sharp-chat-template.jinja"
   $real_image = $image ? {
     undef   => "localhost/llama-${backend}:latest",
     default => $image,
@@ -119,6 +120,15 @@ class llama (
     ensure => directory,
   }
 
+  file { $chat_template:
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    source  => 'puppet:///modules/llama/qwen-sharp-chat-template.jinja',
+    require => File[$install_dir],
+  }
+
   # ui-config carries both Bearer tokens, so keep it root-only and hide it from
   # reports. It lands read-only in the container; llama-server serves it as
   # first-visit defaults.
@@ -149,6 +159,7 @@ class llama (
       'model_path'       => $model_path,
       'mmproj_path'      => $mmproj_path,
       'ui_config'        => $ui_config,
+      'chat_template'    => $chat_template,
       'image'            => $real_image,
       'backend'          => $backend,
       'reasoning_effort' => $reasoning_effort,
@@ -172,6 +183,7 @@ class llama (
       enable    => true,
       subscribe => [
         File[$ui_config],
+        File[$chat_template],
         File["/etc/systemd/system/${service_name}.service"],
       ],
       require   => [
