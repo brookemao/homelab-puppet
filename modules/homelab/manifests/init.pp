@@ -5,7 +5,8 @@
 # repositories (cloudflared from Cloudflare's)
 #
 # @param manage_services Whether to manage and start background services (fail2ban,
-#   ddclient, certificate renewal, nginx, the Claude watcher, the immich systemd unit, and cloudflared)
+#   ddclient, certificate renewal, access hours, nginx, the Claude watcher,
+#   the immich systemd unit, and cloudflared)
 # @param ddclient_install_method 'package' (via dnf, default) or 'tarball' (from GitHub release tarball)
 # @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0' (tarball installs only)
 # @param cloudflare_token API token for Cloudflare DDNS
@@ -56,7 +57,13 @@ class homelab (
 
   # 7. Install and configure Cockpit (proxy-aware cockpit.conf, websm_port_t on 9090, nginx allow module)
   class { 'homelab::cockpit':
+    # The access-hours timer owns runtime state, including socket activation.
+    manage_service => false,
+  }
+
+  class { 'homelab::access_hours':
     manage_service => $manage_services,
+    require        => Class['homelab::cockpit'],
   }
 
   # 8. Obtain wildcard Let's Encrypt certificate via Cloudflare DNS-01 (after ddclient)
