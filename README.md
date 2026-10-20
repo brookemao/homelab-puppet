@@ -14,7 +14,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **podman**: Container runtime with `podman-compose` for compose workloads. Container storage uses the `overlay` driver with `graphroot` relocated to `/home/containers/storage` (SELinux-labeled) instead of the `/var/lib` default.
 - **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); `websearch.brookemao.ca` forwards to the SearXNG MCP server on loopback `8081` gated by a Bearer token; `llama.brookemao.ca` forwards to llama-server on loopback `8080` gated by HTTP Basic auth (`agentforce`); `llama-api.brookemao.ca` forwards to the same llama-server on loopback `8080` gated by per-client API keys (`brooke`, `izzy`, `general`); all other hosts hit the catch-all default page. (Immich is not proxied by nginx — it is published through the Cloudflare Tunnel instead.) SELinux least privilege, same pattern as Cockpit: a minimal `nginx_backends` allow module lets the workers reach both loopback backends (TCP `8081` is relabeled to the policy-shipped `http_cache_port_t` to match `8080`), no `httpd_can_network_connect`.
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
-- **Claude conversation exports**: Hourly conversion as root, at the start of every hour, from `iapark`'s Claude container volume into `/home/share/claudelogs`, served at `https://claudechats.brookemao.ca` with the same required client certificate as Cockpit.
+- **Claude conversation exports**: A systemd watcher runs as root and keeps individual session HTML current from `iapark`'s Claude container volume into `/home/share/claudelogs`, served at `https://claudechats.brookemao.ca` with the same required client certificate as Cockpit.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
 - **cloudflared**: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) from Cloudflare's RPM repository, publishing `immich.iapark.dev` → Immich on `127.0.0.1:2283` with no inbound port. Remotely managed: the tunnel, its public hostname and the Zero Trust Access policy in front of it live in the Cloudflare dashboard; Puppet only runs the connector with the token from `data/secrets.yaml`. See [Cloudflare Tunnel](#cloudflare-tunnel).
@@ -322,19 +322,27 @@ hostnames in that Hiera list. This profile manages one Cloudflare zone/config st
 
 ## Claude conversation exports
 
-`homelab::claudelogs` installs Fedora's `uv`, `cronie`, and `tzdata` packages and
-manages `/etc/cron.d/claudelogs`. At the **start of every hour** (`0 * * * *`),
-it runs the following command as `root` to access both directories, with umask `0027`:
+`homelab::claudelogs` installs Fedora's `uv` package and manages
+`claudelogs.service`. The service runs the following command continuously as
+`root` to access both directories, with `UMask=0027`:
 
 ```bash
-/usr/bin/uvx claude-code-log@latest convert -o /home/share/claudelogs --all-projects /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/
+/usr/bin/uvx claude-code-log@latest watch --all-projects --combined no --projects-dir /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/ --output /home/share/claudelogs
 ```
 
-`CRON_TZ=America/Los_Angeles` controls this job independently of the host timezone.
-The job must be able to download the latest tool from PyPI.
-Override `homelab::claudelogs::{user,projects_dir,output_dir,timezone}` through Hiera
-if needed; nginx uses the same `output_dir`. The baseline `manage_services` flag also
-controls management of `crond`.
+The watcher converts once at startup, then updates HTML when transcripts change.
+Only individual session pages are generated (`--combined no`); combined pages left
+from earlier exports are retained but no longer refreshed. Reload a session page
+to see new messages. nginx continues to serve static HTML; full-archive search
+requires the separate `serve` mode and is not enabled here.
+
+systemd starts the watcher at boot, restarts it on failure, and captures its output
+in the journal. The service must be able to download the latest tool from PyPI at
+startup. Puppet removes the former `/etc/cron.d/claudelogs` job and reloads systemd
+when the unit changes; other cron jobs and the shared cron daemon are left alone.
+Override `homelab::claudelogs::{user,projects_dir,output_dir}` through Hiera if needed;
+nginx uses the same `output_dir`. The baseline `manage_services` flag also controls
+management of `claudelogs.service`.
 
 nginx serves the generated `index.html` and project/session pages at
 `https://claudechats.brookemao.ca`, using the existing wildcard Let's Encrypt certificate
@@ -349,10 +357,11 @@ In Cloudflare, ensure `claudechats.brookemao.ca` has a **DNS-only** A record, as
 Cockpit, so TLS terminates at this nginx instance and it receives the client certificate.
 ddclient maintains the record's public IP using the existing Cloudflare token.
 
-The first export runs at the start of the next hour. To populate the site immediately:
+The first export starts when the service starts. After applying, check it with:
 
 ```bash
-sudo /bin/sh -c 'umask 0027; /usr/bin/uvx claude-code-log@latest convert -o /home/share/claudelogs --all-projects /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/'
+sudo systemctl status claudelogs
+sudo journalctl -u claudelogs -f
 sudo nginx -t
 curl -I https://claudechats.brookemao.ca/  # must reject a request without a client certificate
 curl --cert client.pem --key client.key -I https://claudechats.brookemao.ca/

@@ -1,4 +1,4 @@
-# @summary Exports Claude conversations hourly for the mTLS-protected nginx site
+# @summary Watches Claude conversations and exports HTML for the mTLS-protected nginx site
 #
 # Runs as root to access both the container volume and export directory. The setgid output
 # directory and restrictive umask give nginx read access without making
@@ -7,16 +7,14 @@
 # @param user Export user (root by default to access both directories)
 # @param projects_dir Claude transcript source directory
 # @param output_dir HTML document root shared with homelab::nginx
-# @param timezone Cron scheduling timezone (Pacific time, including DST)
-# @param manage_service Whether to enable and start crond
+# @param manage_service Whether to enable and start the claudelogs watcher
 class homelab::claudelogs (
   String[1]            $user           = 'root',
   Stdlib::Absolutepath $projects_dir   = '/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/',
   Stdlib::Absolutepath $output_dir     = '/home/share/claudelogs',
-  String[1]            $timezone       = 'America/Los_Angeles',
   Boolean              $manage_service = true,
 ) {
-  stdlib::ensure_packages(['uv', 'cronie', 'tzdata'])
+  stdlib::ensure_packages(['uv'])
 
   # Do not require the whole nginx class: its service must be able to start
   # after the document root and SELinux labels are ready.
@@ -58,29 +56,46 @@ class homelab::claudelogs (
       before      => Class['nginx::service'],
       logoutput   => on_failure,
     }
+
+    if $manage_service {
+      Exec['selinux-claudelogs-content'] -> Service['claudelogs']
+    }
   }
 
-  # A separate cron.d file scopes CRON_TZ to this job; it does not change
-  # the system timezone or the schedule of any other user's cron jobs.
+  # Remove the former scheduled exporter before starting the watcher.
   file { '/etc/cron.d/claudelogs':
+    ensure => absent,
+  }
+
+  file { '/etc/systemd/system/claudelogs.service':
     ensure  => file,
     owner   => 'root',
     group   => 'root',
     mode    => '0644',
-    content => epp('homelab/claudelogs.cron.epp', {
+    content => epp('homelab/claudelogs.service.epp', {
       'user'         => $user,
       'projects_dir' => $projects_dir,
       'output_dir'   => $output_dir,
-      'timezone'     => $timezone,
     }),
-    require => [Package['uv'], Package['cronie'], Package['tzdata'], File[$output_dir]],
+    notify  => Exec['claudelogs-daemon-reload'],
+  }
+
+  exec { 'claudelogs-daemon-reload':
+    command     => 'systemctl daemon-reload',
+    path        => ['/usr/bin', '/bin'],
+    refreshonly => true,
   }
 
   if $manage_service {
-    service { 'crond':
-      ensure  => running,
-      enable  => true,
-      require => File['/etc/cron.d/claudelogs'],
+    service { 'claudelogs':
+      ensure    => running,
+      enable    => true,
+      subscribe => [Package['uv'], File['/etc/systemd/system/claudelogs.service']],
+      require   => [
+        File[$output_dir],
+        File['/etc/cron.d/claudelogs'],
+        Exec['claudelogs-daemon-reload'],
+      ],
     }
   }
 }
