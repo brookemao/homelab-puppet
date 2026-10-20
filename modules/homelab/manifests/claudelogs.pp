@@ -1,16 +1,16 @@
 # @summary Exports Claude conversations daily for the mTLS-protected nginx site
 #
-# Runs as the owner of the rootless container volume. The setgid output
+# Runs as root to access both the container volume and export directory. The setgid output
 # directory and restrictive umask give nginx read access without making
 # transcripts world-readable or granting it access to the source volume.
 #
-# @param user Existing user who owns the Claude container volume
+# @param user Export user (root by default to access both directories)
 # @param projects_dir Claude transcript source directory
 # @param output_dir HTML document root shared with homelab::nginx
 # @param timezone Cron scheduling timezone (Pacific time, including DST)
 # @param manage_service Whether to enable and start crond
 class homelab::claudelogs (
-  String[1]            $user           = 'iapark',
+  String[1]            $user           = 'root',
   Stdlib::Absolutepath $projects_dir   = '/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/',
   Stdlib::Absolutepath $output_dir     = '/home/share/claudelogs',
   String[1]            $timezone       = 'America/Los_Angeles',

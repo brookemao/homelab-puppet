@@ -324,14 +324,14 @@ hostnames in that Hiera list. This profile manages one Cloudflare zone/config st
 
 `homelab::claudelogs` installs Fedora's `uv`, `cronie`, and `tzdata` packages and
 manages `/etc/cron.d/claudelogs`. Every day at **04:00 Pacific**, including daylight-saving
-changes, it runs the following command as the existing user `iapark`, with umask `0027`:
+changes, it runs the following command as `root` to access both directories, with umask `0027`:
 
 ```bash
 /usr/bin/uvx claude-code-log@latest convert -o /home/share/claudelogs --all-projects /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/
 ```
 
 `CRON_TZ=America/Los_Angeles` controls this job independently of the host timezone.
-The user must be able to read the source volume and download the latest tool from PyPI.
+The job must be able to download the latest tool from PyPI.
 Override `homelab::claudelogs::{user,projects_dir,output_dir,timezone}` through Hiera
 if needed; nginx uses the same `output_dir`. The baseline `manage_services` flag also
 controls management of `crond`.
@@ -340,7 +340,7 @@ nginx serves the generated `index.html` and project/session pages at
 `https://claudechats.brookemao.ca`, using the existing wildcard Let's Encrypt certificate
 and Cockpit's client CA and verification depth. A valid client certificate is required
 for every page. Directory listings are disabled. The output directory is owned by
-`iapark:nginx` with mode `2750`, so new exports inherit the nginx group and remain
+`root:nginx` with mode `2750`, so new exports inherit the nginx group and remain
 unreadable to other local users. SELinux labels `/home/share` and the export tree as
 `httpd_sys_content_t`; the source container volume keeps its existing labels and permissions.
 
@@ -352,7 +352,7 @@ ddclient maintains the record's public IP using the existing Cloudflare token.
 The first export runs at the next scheduled 04:00. To populate the site immediately:
 
 ```bash
-sudo -u iapark /bin/sh -c 'umask 0027; /usr/bin/uvx claude-code-log@latest convert -o /home/share/claudelogs --all-projects /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/'
+sudo /bin/sh -c 'umask 0027; /usr/bin/uvx claude-code-log@latest convert -o /home/share/claudelogs --all-projects /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/'
 sudo nginx -t
 curl -I https://claudechats.brookemao.ca/  # must reject a request without a client certificate
 curl --cert client.pem --key client.key -I https://claudechats.brookemao.ca/
