@@ -21,7 +21,7 @@ class homelab::ddclient (
   Boolean                    $service_enable    = true,
   String[1]                  $cloudflare_token   = '<SECRET TOKEN HERE>',
   String[1]                  $cloudflare_zone    = 'brookemao.ca',
-  String[1]                  $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca',
+  String[1]                  $cloudflare_domains = 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca,claudechats.brookemao.ca',
   Boolean                    $replace_config    = false,
 ) {
   # The ddclient service account owns the config and cache. The RPM creates
@@ -76,6 +76,19 @@ class homelab::ddclient (
     }),
     replace => $replace_config,
     require => File['/etc/ddclient'],
+    notify  => Service['ddclient'],
+  }
+
+  # Keep the managed zone's hostname list current even with replace => false.
+  # Only the hostname-only line is replaced; saved credentials and options
+  # remain intact. This profile manages one Cloudflare zone/config stanza.
+  $zone_pattern = regsubst($cloudflare_zone, '[.]', '[.]', 'G')
+  file_line { 'ddclient-cloudflare-domains':
+    ensure  => present,
+    path    => '/etc/ddclient/ddclient.conf',
+    match   => "^[ \\t]*([A-Za-z0-9_-]+[.])*${zone_pattern}([ \\t]*,[ \\t]*([A-Za-z0-9_-]+[.])*${zone_pattern})*[ \\t]*$",
+    line    => $cloudflare_domains,
+    require => File['/etc/ddclient/ddclient.conf'],
     notify  => Service['ddclient'],
   }
 
