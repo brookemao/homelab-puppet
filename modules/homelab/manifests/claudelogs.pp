@@ -1,4 +1,4 @@
-# @summary Exports Claude conversations daily for the mTLS-protected nginx site
+# @summary Exports Claude conversations hourly for the mTLS-protected nginx site
 #
 # Runs as root to access both the container volume and export directory. The setgid output
 # directory and restrictive umask give nginx read access without making
