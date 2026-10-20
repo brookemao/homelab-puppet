@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Keep this zone in sync with OnCalendar in homelab-access-hours.timer.
 hour=$(TZ=America/Vancouver date +%H)
+today=$(TZ=America/Vancouver date +%F)
 units=(cockpit.socket cockpit.service sshd.service)
 boot_units=(cockpit.socket sshd.service)
 
@@ -22,17 +23,18 @@ for unit in "${boot_units[@]}"; do
     fi
 done
 
-# The timer owns the watcher's activation. Remove any persistent boot enablement
-# left by the former always-on Puppet service; overnight enablement is runtime-only.
-systemctl disable homelab-claude-history.path
-
 if (( 10#$hour < 9 )); then
-    systemctl enable --runtime --now homelab-claude-history.path
+    # Do not rearm after a kill, including on Puppet applies or reboots.
+    if [[ -f "/var/lib/homelab-claude-history/killed-$today" ]]; then
+        systemctl disable --runtime --now homelab-claude-history.timer
+    else
+        systemctl enable --runtime --now homelab-claude-history.timer
+    fi
     # Mask as well as stop: socket activation and manual/dependency starts
     # must not reopen access. Runtime masks disappear on reboot.
     systemctl mask --runtime --now "${units[@]}"
 else
-    systemctl disable --runtime --now homelab-claude-history.path
+    systemctl disable --runtime --now homelab-claude-history.timer
     systemctl unmask --runtime "${units[@]}"
     # Cockpit's service is socket-activated; only its socket needs starting.
     systemctl start cockpit.socket sshd.service

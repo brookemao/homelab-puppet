@@ -1,0 +1,71 @@
+#!/bin/bash
+set -euo pipefail
+
+export TZ=America/Vancouver
+projects=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects
+state=/var/lib/homelab-claude-history
+today=$(date +%F)
+hour=$(date +%H)
+timer=homelab-claude-history.timer
+
+# Also enforce the window on manual starts and delayed timer activations.
+if (( 10#$hour >= 9 )); then
+    exit 0
+fi
+if [[ -f "$state/killed-$today" ]]; then
+    systemctl disable --runtime --now "$timer"
+    exit 0
+fi
+[[ -d "$projects" ]] || exit 0
+cd "$projects"
+
+# grep returns 1 for no matches, which is a normal idle night. Other errors
+# and incomplete JSON fail the check so the next timer tick can retry safely.
+records=$(grep -h -R -F '"origin":{"kind":"human"}' .) || {
+    status=$?
+    if (( status == 1 )); then
+        exit 0
+    fi
+    exit "$status"
+}
+latest=$(jq -rs 'sort_by(.timestamp) | reverse | .[0].timestamp // empty' <<< "$records")
+[[ -n "$latest" ]] || exit 0
+
+# GNU date accepts ISO 8601 timestamps including UTC Z and fractional seconds.
+# Use nanoseconds so a message just after midnight still exceeds the limit.
+latest_ns=$(date --date="$latest" +%s%N)
+limit_ns=$(date --date="$today 00:00:00" +%s%N)
+if (( latest_ns <= limit_ns )); then
+    exit 0
+fi
+
+# Only access iapark's local rootless Podman storage, never root's or a remote.
+uid=$(id -u iapark)
+podman() {
+    runuser -u iapark -- env HOME=/home/iapark XDG_RUNTIME_DIR="/run/user/$uid" \
+        /usr/bin/podman --remote=false "$@"
+}
+containers=$(podman ps --format json)
+targets=$(jq -r '
+    .[] | with_entries(.key |= ascii_downcase) |
+    select(
+        ((.names // [] | if type == "string" then [.] else . end) |
+            any(. == "immich-tools" or startswith("vsc-immich-tools-"))) or
+        ((.labels // {}) | [."devcontainer.local_folder", ."vsch.local.folder"] |
+            any(. // "" | gsub("\\\\"; "/") | rtrimstr("/") |
+                split("/") | last == "immich-tools"))
+    ) | .id
+' <<< "$containers")
+if [[ -z "$targets" ]]; then
+    echo 'Overnight Claude activity: no running immich-tools container found; will retry.'
+    exit 0
+fi
+mapfile -t ids <<< "$targets"
+echo "Overnight Claude activity ($latest): killing ${#ids[@]} immich-tools container(s)."
+podman kill "${ids[@]}"
+
+# Record success before disabling: retries, reboots and Puppet applies must
+# never rearm the timer in this same nighttime window.
+mkdir -p "$state"
+touch "$state/killed-$today"
+systemctl disable --runtime --now "$timer"

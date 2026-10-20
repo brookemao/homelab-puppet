@@ -7,14 +7,14 @@ class homelab::access_hours (
     ensure => installed,
   }
 
-  stdlib::ensure_packages(['python3', 'tzdata'])
+  stdlib::ensure_packages(['bash', 'jq', 'tzdata'])
 
   file { '/usr/local/sbin/homelab-claude-history':
     ensure => file,
     owner  => 'root',
     group  => 'root',
     mode   => '0755',
-    source => 'puppet:///modules/homelab/claude-history-guard.py',
+    source => 'puppet:///modules/homelab/claude-history-guard.sh',
   }
 
   file { '/usr/local/sbin/homelab-access-hours':
@@ -29,7 +29,7 @@ class homelab::access_hours (
     'homelab-access-hours.service',
     'homelab-access-hours.timer',
     'homelab-claude-history.service',
-    'homelab-claude-history.path',
+    'homelab-claude-history.timer',
   ].each |$unit| {
     file { "/etc/systemd/system/${unit}":
       ensure => file,
@@ -46,20 +46,32 @@ class homelab::access_hours (
     refreshonly => true,
   }
 
+  # Retire the old history.jsonl watcher before installing its replacement.
+  file { '/etc/systemd/system/homelab-claude-history.path':
+    ensure => absent,
+    notify => Exec['systemd-daemon-reload-access-hours'],
+  }
+
   if $manage_service {
+    exec { 'retire-claude-history-path':
+      command => '/usr/bin/systemctl disable --now homelab-claude-history.path',
+      onlyif  => '/usr/bin/test -f /etc/systemd/system/homelab-claude-history.path',
+      before  => File['/etc/systemd/system/homelab-claude-history.path'],
+    }
     # Reconcile on every apply so Puppet never reopens access overnight and
     # installing the schedule takes effect immediately, even between events.
     exec { 'enforce-access-hours':
       command => '/usr/bin/systemctl start homelab-access-hours.service',
       require => [
         Package['openssh-server'],
-        Package['python3'],
+        Package['bash'],
+        Package['jq'],
         Package['tzdata'],
         File['/usr/local/sbin/homelab-access-hours'],
         File['/usr/local/sbin/homelab-claude-history'],
         File['/etc/systemd/system/homelab-access-hours.service'],
         File['/etc/systemd/system/homelab-claude-history.service'],
-        File['/etc/systemd/system/homelab-claude-history.path'],
+        File['/etc/systemd/system/homelab-claude-history.timer'],
         Exec['systemd-daemon-reload-access-hours'],
       ],
     }
