@@ -1,0 +1,25 @@
+<%- | String[1] $user,
+      Stdlib::Absolutepath $projects_dir,
+      Stdlib::Absolutepath $output_dir,
+| -%>
+# Managed by Puppet. Local changes will be overwritten.
+[Unit]
+Description=Watch Claude conversations and export session HTML
+Documentation=https://daaain.github.io/claude-code-log/live-updates/
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor="<%= $projects_dir %>" "<%= $output_dir %>"
+
+[Service]
+Type=simple
+User=<%= $user %>
+WorkingDirectory=<%= $output_dir %>
+UMask=0027
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/uvx claude-code-log@latest watch --all-projects --combined no --projects-dir "<%= $projects_dir %>" --output "<%= $output_dir %>"
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

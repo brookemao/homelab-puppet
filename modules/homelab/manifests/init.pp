@@ -5,7 +5,7 @@
 # repositories (cloudflared from Cloudflare's)
 #
 # @param manage_services Whether to manage and start background services (fail2ban,
-#   ddclient, certificate renewal, nginx, crond, the immich systemd unit, and cloudflared)
+#   ddclient, certificate renewal, nginx, the Claude watcher, the immich systemd unit, and cloudflared)
 # @param ddclient_install_method 'package' (via dnf, default) or 'tarball' (from GitHub release tarball)
 # @param ddclient_release_tag 'latest' (tracks newest tag past 4.0.0) or specific tag like 'v4.0.0' (tarball installs only)
 # @param cloudflare_token API token for Cloudflare DDNS
@@ -79,7 +79,7 @@ class homelab (
   $llama_basic_password = lookup('llama::basic_auth_password', Sensitive[String[1]], 'first')
   $crawl4ai_bearer_token = lookup('llama::crawl4ai_bearer_token', Sensitive[String[1]], 'first')
 
-  # Export the rootless Claude volume hourly; nginx serves only the exports.
+  # Watch the rootless Claude volume continuously; nginx serves only the exports.
   class { 'homelab::claudelogs':
     manage_service => $manage_services,
   }
