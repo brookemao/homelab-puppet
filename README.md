@@ -61,6 +61,10 @@ The calendar syntax follows [systemd's timer documentation](https://www.freedesk
 
 `homelab-claude-history.path` also watches changes to
 `/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/history.jsonl`.
+The access-hours timer enables and starts this watcher at midnight, then
+disables and stops it at 9 AM. Its overnight enablement is runtime-only, so
+the timer checks the schedule before activating it after a reboot. Puppet
+delegates the watcher's state to the timer and applies the schedule immediately.
 After a write closes or the file is replaced, its service reads the last
 nonempty JSONL record. It stops `iapark`'s running **immich-tools devcontainer**
 only when the current time is midnight–9 AM Pacific and that record's timestamp

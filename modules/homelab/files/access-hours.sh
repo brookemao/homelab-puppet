@@ -22,11 +22,17 @@ for unit in "${boot_units[@]}"; do
     fi
 done
 
+# The timer owns the watcher's activation. Remove any persistent boot enablement
+# left by the former always-on Puppet service; overnight enablement is runtime-only.
+systemctl disable homelab-claude-history.path
+
 if (( 10#$hour < 9 )); then
+    systemctl enable --runtime --now homelab-claude-history.path
     # Mask as well as stop: socket activation and manual/dependency starts
     # must not reopen access. Runtime masks disappear on reboot.
     systemctl mask --runtime --now "${units[@]}"
 else
+    systemctl disable --runtime --now homelab-claude-history.path
     systemctl unmask --runtime "${units[@]}"
     # Cockpit's service is socket-activated; only its socket needs starting.
     systemctl start cockpit.socket sshd.service

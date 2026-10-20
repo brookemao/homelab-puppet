@@ -53,8 +53,13 @@ class homelab::access_hours (
       command => '/usr/bin/systemctl start homelab-access-hours.service',
       require => [
         Package['openssh-server'],
+        Package['python3'],
+        Package['tzdata'],
         File['/usr/local/sbin/homelab-access-hours'],
+        File['/usr/local/sbin/homelab-claude-history'],
         File['/etc/systemd/system/homelab-access-hours.service'],
+        File['/etc/systemd/system/homelab-claude-history.service'],
+        File['/etc/systemd/system/homelab-claude-history.path'],
         Exec['systemd-daemon-reload-access-hours'],
       ],
     }
@@ -64,19 +69,6 @@ class homelab::access_hours (
       enable    => true,
       require   => Exec['enforce-access-hours'],
       subscribe => File['/etc/systemd/system/homelab-access-hours.timer'],
-    }
-
-    # Only observe and stop the external devcontainer; its creation, startup,
-    # and configuration remain outside this repository.
-    service { 'homelab-claude-history.path':
-      ensure    => running,
-      enable    => true,
-      require   => [Package['python3'], Package['tzdata'], Exec['systemd-daemon-reload-access-hours']],
-      subscribe => [
-        File['/usr/local/sbin/homelab-claude-history'],
-        File['/etc/systemd/system/homelab-claude-history.service'],
-        File['/etc/systemd/system/homelab-claude-history.path'],
-      ],
     }
   }
 }
