@@ -63,7 +63,7 @@ class homelab (
 
   class { 'homelab::access_hours':
     manage_service => $manage_services,
-    require        => Class['homelab::cockpit'],
+    require        => [Class['homelab::cockpit'], Class['homelab::podman']],
   }
 
   # 8. Obtain wildcard Let's Encrypt certificate via Cloudflare DNS-01 (after ddclient)

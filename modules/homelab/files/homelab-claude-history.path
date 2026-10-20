@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch iapark's Claude history for overnight activity
+
+[Path]
+PathChanged=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/history.jsonl
+TriggerLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
