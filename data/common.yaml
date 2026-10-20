@@ -11,6 +11,9 @@ homelab::ddclient_replace_config: false
 immich::external_libraries:
   - '/mnt/parkpack/photos'
 
+# Transcoded videos are writable; the photos bind mount remains read-only.
+immich::encoded_video_location: '/mnt/immich/encoded-video'
+
 # Bulk ML processing is done; run the plain CPU image instead of the larger -rocm image
 immich::ml_acceleration: 'cpu'
 
