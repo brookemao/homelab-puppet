@@ -15,6 +15,7 @@ Type=simple
 User=<%= $user %>
 WorkingDirectory=<%= $output_dir %>
 UMask=0027
+OOMScoreAdjust=500
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/uvx claude-code-log@latest watch --all-projects --combined no --projects-dir "<%= $projects_dir %>" --output "<%= $output_dir %>"
