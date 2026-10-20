@@ -59,28 +59,33 @@ at 9 AM. An installed `sshd.socket` is also blocked overnight. The timer and
 hour check both use **`America/Vancouver`**, independently of the host timezone.
 The calendar syntax follows [systemd's timer documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
 
-`homelab-claude-history.path` also watches changes to
-`/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/history.jsonl`.
-The access-hours timer enables and starts this watcher at midnight, then
-disables and stops it at 9 AM. Its overnight enablement is runtime-only, so
-the timer checks the schedule before activating it after a reboot. Puppet
-delegates the watcher's state to the timer and applies the schedule immediately.
-After a write closes or the file is replaced, its service reads the last
-nonempty JSONL record. It stops `iapark`'s running **immich-tools devcontainer**
-only when the current time is midnight–9 AM Pacific and that record's timestamp
-is also in today's midnight–9 AM Pacific window. Older records, malformed or
-incomplete final records, and daytime changes do not trigger a stop. Numeric
-Unix millisecond timestamps are supported, along with Unix seconds and
-timezone-aware ISO timestamps. The date comparison uses `America/Vancouver`.
+`homelab-claude-history.timer` runs a Bash oneshot service every five minutes
+from 00:00 through 08:55 Pacific. The access-hours timer enables and starts it
+at midnight, then disables and stops it at 9 AM. Its enablement is runtime-only;
+the access-hours service checks the schedule again after reboot and on every
+Puppet apply. The old `history.jsonl` path watcher is removed during migration.
 
-The check runs as `iapark`, using that user's local rootless Podman storage.
+The script recursively greps
+`/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects`
+for `"origin":{"kind":"human"}`, then uses `jq` to sort matching JSON records
+by timestamp, latest first. If the latest ISO 8601 timestamp is strictly after
+today's midnight in `America/Vancouver`, it kills `iapark`'s running
+**immich-tools devcontainer**. No matches or a missing projects directory do
+nothing; read errors, malformed JSON and invalid timestamps fail the check and
+are retried on the next tick. Fractional seconds are included in the comparison.
+
+The service runs as root to control its system timer, invoking Podman as
+`iapark` using that user's local rootless storage.
 It identifies the external devcontainer by the exact name `immich-tools`, a
 generated `vsc-immich-tools-...` name, or a `devcontainer.local_folder` /
 `vsch.local.folder` label whose folder is named `immich-tools`. Matching running
-containers are stopped with a 10-second grace period. This repository does not
+containers are killed with `podman kill`. After a successful kill, the script
+records `/var/lib/homelab-claude-history/killed-YYYY-MM-DD`, then disables and
+stops the five-minute timer. This prevents another kill in the same nighttime
+window even after reboot or a Puppet apply. The following midnight uses a new
+date and enables the timer again. If no matching container is running, checks
+continue until a kill succeeds or the window ends. This repository does not
 create, reconfigure, or automatically restart the devcontainer at 9 AM.
-The path watcher does not act on unchanged history when it starts.
-See [systemd path units](https://www.freedesktop.org/software/systemd/man/latest/systemd.path.html).
 
 The schedule is enforced immediately on every Puppet apply and checked again
 at boot and after missed timer events. Native boot activation of these
@@ -95,7 +100,7 @@ Apply using the usual bootstrap/Puppet workflow, then inspect it on the host:
 ```bash
 sudo systemctl list-timers homelab-access-hours.timer
 sudo journalctl -u homelab-access-hours.service
-sudo systemctl status homelab-claude-history.path
+sudo systemctl list-timers homelab-claude-history.timer
 sudo journalctl -u homelab-claude-history.service
 ```
 

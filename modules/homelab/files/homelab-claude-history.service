@@ -1,15 +1,14 @@
 [Unit]
-Description=Stop iapark's immich-tools devcontainer on overnight Claude use
+Description=Kill iapark's immich-tools devcontainer after overnight human Claude use
 After=time-sync.target
 Wants=time-sync.target
-# Repeated history changes must not permanently disable the path watcher.
-StartLimitIntervalSec=0
 RequiresMountsFor=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data
 
 [Service]
 Type=oneshot
-User=iapark
-Environment=HOME=/home/iapark
-Environment=PYTHONUNBUFFERED=1
+# Root controls the system timer; the script runs Podman as iapark.
+StateDirectory=homelab-claude-history
+StateDirectoryMode=0700
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/sbin/homelab-claude-history
-TimeoutStartSec=100
+TimeoutStartSec=240
