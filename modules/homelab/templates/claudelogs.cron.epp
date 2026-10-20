@@ -1,0 +1,11 @@
+<%- | String[1] $user,
+      Stdlib::Absolutepath $projects_dir,
+      Stdlib::Absolutepath $output_dir,
+      String[1] $timezone,
+| -%>
+# Managed by Puppet. Export all Claude projects every day at 04:00 Pacific.
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+CRON_TZ=<%= $timezone %>
+TZ=<%= $timezone %>
+0 4 * * * <%= $user %> umask 0027; /usr/bin/uvx claude-code-log@latest convert -o '<%= $output_dir %>' --all-projects '<%= $projects_dir %>'

@@ -2,6 +2,7 @@
 #
 # Requests for cockpit.brookemao.ca are forwarded to Cockpit on 9090 and
 # require an mTLS client certificate signed by the personal PKI root.
+# claudechats.brookemao.ca serves exported Claude HTML using the same mTLS CA.
 # Requests for websearch.brookemao.ca are forwarded to the SearXNG MCP server
 # on 8081 gated by a Bearer token, llama.brookemao.ca to llama-server on
 # 8080 gated by HTTP Basic auth, and llama-api.brookemao.ca to the same
@@ -24,6 +25,7 @@
 # @param ssl Whether to terminate TLS using the Let's Encrypt certificate
 # @param cert_name Certificate lineage name under /etc/letsencrypt/live (defaults to the zone apex)
 # @param default_www_root Document root for the catch-all default page
+# @param claudechats_server_name Host name for the mTLS-protected Claude exports
 # @param manage_service Whether to manage and start the nginx service
 # @param websearch_auth_token Bearer token gating the websearch (SearXNG MCP) vhost;
 #   the same secret the searxng module injects into the MCP container
@@ -63,6 +65,7 @@ class homelab::nginx (
   Boolean              $ssl                         = true,
   String[1]            $cert_name                   = 'brookemao.ca',
   String[1]            $default_www_root            = '/usr/share/nginx/html',
+  String[1]            $claudechats_server_name      = 'claudechats.brookemao.ca',
   Boolean              $manage_service              = true,
   Sensitive[String[1]] $websearch_auth_token,
   String[1]            $websearch_server_name       = 'websearch.brookemao.ca',
@@ -85,6 +88,8 @@ class homelab::nginx (
   String[1]            $selinux_backends_module_name  = 'nginx_backends',
   String[1]            $selinux_policy_dir            = '/usr/local/share/selinux',
 ) {
+  include homelab::claudelogs
+
   # MCP HTTP responses can be SSE streams; the stock 90s upstream timeout
   # would cut long searches short. 10 minutes keeps direct browser streams
   # alive through slow tool calls.
@@ -154,6 +159,25 @@ class homelab::nginx (
     require             => File[$cockpit_client_ca_path],
     # NOTE: do NOT require Class['nginx'] here (see above -- it creates a
     # dependency cycle via the define's internal notify to nginx::service).
+  }
+
+  # The exporter owns the document root. Use its parameter so Hiera overrides
+  # cannot point nginx and the scheduled conversion at different directories.
+  nginx::resource::server { 'claudechats':
+    ensure            => present,
+    server_name       => [$claudechats_server_name],
+    listen_port       => $listen_port,
+    ssl_port          => $listen_port,
+    ssl               => true,
+    ssl_cert          => $ssl_cert,
+    ssl_key           => $ssl_key,
+    ssl_client_cert   => $cockpit_client_ca_path,
+    ssl_verify_client => 'on',
+    ssl_verify_depth  => $cockpit_client_verify_depth,
+    www_root          => $homelab::claudelogs::output_dir,
+    index_files       => ['index.html'],
+    autoindex         => 'off',
+    require           => [File[$cockpit_client_ca_path], File[$homelab::claudelogs::output_dir]],
   }
 
   nginx::resource::server { 'homelab-default':

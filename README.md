@@ -14,6 +14,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 - **podman**: Container runtime with `podman-compose` for compose workloads. Container storage uses the `overlay` driver with `graphroot` relocated to `/home/containers/storage` (SELinux-labeled) instead of the `/var/lib` default.
 - **nginx**: TLS reverse proxy (via `puppet-nginx`) — `cockpit.brookemao.ca` forwards to Cockpit on port `9090` requiring an mTLS client certificate signed by the personal PKI root (upstream `proxy_ssl_verify off` — Cockpit uses a self-signed cert on localhost); `websearch.brookemao.ca` forwards to the SearXNG MCP server on loopback `8081` gated by a Bearer token; `llama.brookemao.ca` forwards to llama-server on loopback `8080` gated by HTTP Basic auth (`agentforce`); `llama-api.brookemao.ca` forwards to the same llama-server on loopback `8080` gated by per-client API keys (`brooke`, `izzy`, `general`); all other hosts hit the catch-all default page. (Immich is not proxied by nginx — it is published through the Cloudflare Tunnel instead.) SELinux least privilege, same pattern as Cockpit: a minimal `nginx_backends` allow module lets the workers reach both loopback backends (TCP `8081` is relabeled to the policy-shipped `http_cache_port_t` to match `8080`), no `httpd_can_network_connect`.
 - **cockpit**: Proxy-aware Cockpit (`Origins` + `X-Forwarded-Proto` in `cockpit.conf`, `cockpit.socket` enabled) with extra UIs for Podman containers, virtual machines, and files (`cockpit-podman`, `cockpit-machines`, `cockpit-files`) and SELinux least privilege — TCP `9090` stays on its policy-shipped `websm_port_t` label and a minimal `nginx_cockpit` allow module lets nginx connect, no `httpd_can_network_connect`.
+- **Claude conversation exports**: Daily conversion at 04:00 Pacific (`America/Los_Angeles`) from `iapark`'s Claude container volume into `/home/share/claudelogs`, served at `https://claudechats.brookemao.ca` with the same required client certificate as Cockpit.
 - **letsencrypt**: Wildcard certificate for the zone apex + `*` via Cloudflare DNS-01 (via `puppet-letsencrypt`), with a twice-daily `certbot-renew` systemd timer and nginx reload on renewal.
 - **ddclient**: Dynamic DNS client installed via the native DNF package (or built from the upstream [GitHub release tarball](https://github.com/ddclient/ddclient#installation) with automatic discovery of the latest tag past 4.0.0 and systemd service integration).
 - **cloudflared**: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) from Cloudflare's RPM repository, publishing `immich.iapark.dev` → Immich on `127.0.0.1:2283` with no inbound port. Remotely managed: the tunnel, its public hostname and the Zero Trust Access policy in front of it live in the Cloudflare dashboard; Puppet only runs the connector with the token from `data/secrets.yaml`. See [Cloudflare Tunnel](#cloudflare-tunnel).
@@ -133,7 +134,7 @@ This project uses standard Hiera 5 data lookups.
   homelab::ddclient_install_method: 'package'
   homelab::ddclient_release_tag: 'latest'
   homelab::cloudflare_zone: 'brookemao.ca'
-  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca'
+  homelab::cloudflare_domains: 'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca,claudechats.brookemao.ca'
   homelab::ddclient_replace_config: false
   ```
 
@@ -196,7 +197,7 @@ This project uses standard Hiera 5 data lookups.
 | `ddclient_release_tag` | `String` | `'latest'` | `'latest'` (auto-queries newest GitHub release tag past 4.0.0) or specific tag (e.g. `'v4.0.0'`) |
 | `cloudflare_token` | `String` | `'<SECRET TOKEN HERE>'` | Cloudflare API Token for dynamic DNS updates |
 | `cloudflare_zone` | `String` | `'brookemao.ca'` | Cloudflare root domain zone |
-| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca'` | Subdomains to update |
+| `cloudflare_domains` | `String` | `'homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca,claudechats.brookemao.ca'` | Subdomains to update |
 | `ddclient_replace_config` | `Boolean` | `false` | Whether to overwrite existing `/etc/ddclient/ddclient.conf` |
 
 ### `immich`
@@ -300,7 +301,7 @@ zone=brookemao.ca,            \
 ttl=1,                      \
 login=token,    \
 password=<SECRET TOKEN HERE> \
-homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca
+homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookemao.ca,llama.brookemao.ca,llama-api.brookemao.ca,websearch.brookemao.ca,claudechats.brookemao.ca
 ```
 
 1. If you ran without supplying a token, update the secret in `/etc/ddclient/ddclient.conf`:
@@ -312,7 +313,52 @@ homelab.brookemao.ca,mindustry.brookemao.ca,photos.brookemao.ca,cockpit.brookema
    sudo systemctl start ddclient
    sudo systemctl status ddclient
    ```
-*(Note: `replace => false` by default ensures your API credentials will never be overwritten on subsequent runs unless `ddclient_replace_config=true` is explicitly provided).*
+`replace => false` preserves existing API credentials and options. Puppet still updates
+the hostname-only line for the managed Cloudflare zone from `homelab::cloudflare_domains`,
+so adding `claudechats.brookemao.ca` takes effect on existing installations. Keep custom
+hostnames in that Hiera list. This profile manages one Cloudflare zone/config stanza.
+
+---
+
+## Claude conversation exports
+
+`homelab::claudelogs` installs Fedora's `uv`, `cronie`, and `tzdata` packages and
+manages `/etc/cron.d/claudelogs`. Every day at **04:00 Pacific**, including daylight-saving
+changes, it runs the following command as the existing user `iapark`, with umask `0027`:
+
+```bash
+/usr/bin/uvx claude-code-log@latest convert -o /home/share/claudelogs --all-projects /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/
+```
+
+`CRON_TZ=America/Los_Angeles` controls this job independently of the host timezone.
+The user must be able to read the source volume and download the latest tool from PyPI.
+Override `homelab::claudelogs::{user,projects_dir,output_dir,timezone}` through Hiera
+if needed; nginx uses the same `output_dir`. The baseline `manage_services` flag also
+controls management of `crond`.
+
+nginx serves the generated `index.html` and project/session pages at
+`https://claudechats.brookemao.ca`, using the existing wildcard Let's Encrypt certificate
+and Cockpit's client CA and verification depth. A valid client certificate is required
+for every page. Directory listings are disabled. The output directory is owned by
+`iapark:nginx` with mode `2750`, so new exports inherit the nginx group and remain
+unreadable to other local users. SELinux labels `/home/share` and the export tree as
+`httpd_sys_content_t`; the source container volume keeps its existing labels and permissions.
+
+Apply the manifests using the normal command from [Standalone Execution](#2-standalone-execution).
+In Cloudflare, ensure `claudechats.brookemao.ca` has a **DNS-only** A record, as with
+Cockpit, so TLS terminates at this nginx instance and it receives the client certificate.
+ddclient maintains the record's public IP using the existing Cloudflare token.
+
+The first export runs at the next scheduled 04:00. To populate the site immediately:
+
+```bash
+sudo -u iapark /bin/sh -c 'umask 0027; /usr/bin/uvx claude-code-log@latest convert -o /home/share/claudelogs --all-projects /home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/'
+sudo nginx -t
+curl -I https://claudechats.brookemao.ca/  # must reject a request without a client certificate
+curl --cert client.pem --key client.key -I https://claudechats.brookemao.ca/
+```
+
+The authenticated request should return `200` once conversion has generated `index.html`.
 
 ---
 
