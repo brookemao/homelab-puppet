@@ -2,7 +2,7 @@
 #
 # The compose file lives in $install_dir. Everything else lives under $base_dir, with all
 # persistent data in $base_dir/data in a fixed layout (library, postgres, ml-model-cache,
-# redis) so one ownership scheme and one SELinux rule cover it.
+# redis), except for an optional encoded-video bind mount.
 #
 # Requires puppet-selinux (for the file context rule) and podman-compose (see
 # homelab::podman).
@@ -27,6 +27,10 @@
 #   container at the same path, for use as Immich external libraries (add each path under
 #   Administration > External Libraries). They must already be readable by the immich
 #   uid under a container-readable SELinux label (see homelab::parkpack).
+# @param encoded_video_location Optional host directory for transcoded videos. Written to
+#   .env as ENCODED_VIDEO_LOCATION and mounted at /data/encoded-video. The parent must
+#   exist; Puppet manages the directory's ownership and writable container SELinux label.
+#   Existing files must be copied there with Immich stopped before applying this change.
 # @param cpu_limit Cores the whole stack may use. Applied to the pod podman-compose puts
 #   the containers in, so it is a collective cap, not a per-container one.
 # @param memory_limit Memory the whole stack may use, e.g. '8g'. Collective, as above.
@@ -50,6 +54,7 @@ class immich (
   Immich::Absolutepath $install_dir     = '/opt/immich-app',
   Immich::Absolutepath $base_dir        = '/home/immich',
   Array[Immich::Absolutepath] $external_libraries = [],
+  Optional[Immich::Absolutepath] $encoded_video_location = undef,
   String[1]            $user            = 'immich',
   String[1]            $group           = 'immich',
   Numeric              $cpu_limit       = 8,
@@ -63,9 +68,7 @@ class immich (
   Boolean              $manage_service  = true,
   String[1]            $service_name    = 'immich',
 ) {
-  # Fixed layout, deliberately not parameterised. Everything the containers persist sits
-  # under $data_dir, so one SELinux rule and one ownership scheme cover all of it, and
-  # anything placed beside $data_dir stays outside the container label.
+  # Default persistent layout. A separate encoded-video mount may override that subfolder.
   $data_dir        = "${base_dir}/data"
   $upload_location = "${data_dir}/library"
   $db_location     = "${data_dir}/postgres"
@@ -156,6 +159,39 @@ class immich (
 
   # Compose file contains the DB password, so keep it private and hide it from reports
   $compose_file = "${install_dir}/compose.yml"
+  $env_file     = "${install_dir}/.env"
+
+  if $encoded_video_location {
+    if $selinux_enabled {
+      selinux::fcontext { "${encoded_video_location}(/.*)?":
+        seltype => $selinux_type,
+        before  => File[$encoded_video_location],
+      }
+    }
+
+    file { $encoded_video_location:
+      ensure  => directory,
+      owner   => $user,
+      group   => $group,
+      mode    => '0750',
+      seltype => $dir_seltype,
+      require => User[$user],
+    }
+
+    file { $env_file:
+      ensure  => file,
+      owner   => 'root',
+      group   => $group,
+      mode    => '0640',
+      content => epp('immich/env.epp', { 'encoded_video_location' => $encoded_video_location }),
+      require => File[$install_dir],
+    }
+    File[$encoded_video_location] -> File[$compose_file]
+  } else {
+    file { $env_file:
+      ensure => absent,
+    }
+  }
 
   file { $compose_file:
     ensure  => file,
@@ -169,6 +205,7 @@ class immich (
       'db_port'            => $published_db_port,
       'port'               => $port,
       'upload_location'    => $upload_location,
+      'encoded_video_location' => $encoded_video_location,
       'external_libraries' => $external_libraries,
       'db_location'        => $db_location,
       'ml_cache'           => $ml_cache,
@@ -194,6 +231,7 @@ class immich (
       'compose_file'       => $compose_file,
       'install_dir'        => $install_dir,
       'data_dir'           => $data_dir,
+      'encoded_video_location' => $encoded_video_location,
       'external_libraries' => $external_libraries,
     }),
     notify  => Exec["${service_name}-daemon-reload"],
@@ -214,7 +252,7 @@ class immich (
       refreshonly => true,
       logoutput   => true,
       loglevel    => 'warning',
-      subscribe   => File[$compose_file],
+      subscribe   => [File[$compose_file], File[$env_file]],
     }
   }
 
@@ -225,6 +263,7 @@ class immich (
       enable    => true,
       subscribe => [
         File[$compose_file],
+        File[$env_file],
         File["/etc/systemd/system/${service_name}.service"],
       ],
       require   => [

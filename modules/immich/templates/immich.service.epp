@@ -3,6 +3,7 @@
   String $compose_file,
   String $install_dir,
   String $data_dir,
+  Optional[String] $encoded_video_location,
   Array[String] $external_libraries,
 | -%>
 # Managed by Puppet. Local changes will be overwritten.
@@ -11,8 +12,8 @@ Description=Immich photo server (podman-compose)
 Documentation=https://immich.app
 Wants=network-online.target
 After=network-online.target
-# If the data dir or an external library is a separate mount, don't start until it is there
-RequiresMountsFor=<%= ([$data_dir] + $external_libraries).join(' ') %>
+# Wait for all storage mounts, including the optional transcoded-video directory.
+RequiresMountsFor=<%= ([$data_dir] + $external_libraries + [$encoded_video_location].filter |$path| { $path != undef }).join(' ') %>
 
 [Service]
 Type=oneshot

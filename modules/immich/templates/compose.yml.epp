@@ -5,6 +5,7 @@
   Optional[Integer] $db_port,
   Integer $port,
   String  $upload_location,
+  Optional[String] $encoded_video_location,
   Array[String] $external_libraries,
   String  $db_location,
   String  $ml_cache,
@@ -35,6 +36,9 @@ services:
     image: ghcr.io/immich-app/immich-server:<%= $version %>
     volumes:
       - <%= $upload_location %>:/data
+<%- if $encoded_video_location { -%>
+      - ${ENCODED_VIDEO_LOCATION}:/data/encoded-video
+<%- } -%>
       - /etc/localtime:/etc/localtime:ro
 <%- $external_libraries.each |$library| { -%>
       - <%= $library %>:<%= $library %>:ro

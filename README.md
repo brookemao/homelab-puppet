@@ -395,6 +395,36 @@ reachable from the host but not through firewalld from the LAN.
 
 The first start pulls several GB of images; the unit allows 15 minutes for it.
 
+### Encoded-video storage
+
+`immich::encoded_video_location` is set to `/mnt/immich/encoded-video` in
+`data/common.yaml`. Puppet writes `ENCODED_VIDEO_LOCATION` to `/opt/immich-app/.env`
+and uses it for the server's `/data/encoded-video` bind mount, following Immich's
+[custom-location guide](https://docs.immich.app/guides/custom-locations/).
+The systemd unit waits for this storage mount, and changes to `.env` restart the stack.
+Omitting the Hiera key leaves encoded videos under `/home/immich/data/library/encoded-video`.
+
+For an existing deployment, copy the files **before the first apply of this change**
+on the Fedora host (adjust the source if `immich::base_dir` was overridden):
+
+```bash
+sudo systemctl stop immich
+sudo mkdir -p /mnt/immich/encoded-video
+sudo rsync -a /home/immich/data/library/encoded-video/ /mnt/immich/encoded-video/
+```
+
+Copy the entire directory, including its hidden `.immich` marker. Then run the normal
+Puppet apply to set directory ownership and the `container_file_t` label,
+then run `sudo restorecon -R /mnt/immich/encoded-video` to label the copied files
+and `sudo systemctl restart immich` to restart with those labels in place.
+Ensure `/mnt/immich` exists and its storage is mounted before applying.
+If the previous parkpack location was already deployed, use
+`/mnt/parkpack/encoded-video/` as the rsync source instead, and stop other processes
+using parkpack so Puppet can remount it with its original read-only SELinux label.
+The external photos library is still mounted `:ro` inside the server container.
+Keep the original encoded-video files until playback and transcoding work at the new
+location. Puppet does not copy or delete existing media files.
+
 ### Read-only database access
 
 Setting `immich::db_readonly_password` (bootstrap generates it) publishes PostgreSQL on
