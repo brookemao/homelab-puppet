@@ -79,7 +79,7 @@ class homelab (
   $llama_basic_password = lookup('llama::basic_auth_password', Sensitive[String[1]], 'first')
   $crawl4ai_bearer_token = lookup('llama::crawl4ai_bearer_token', Sensitive[String[1]], 'first')
 
-  # Export the rootless Claude volume daily; nginx serves only the exports.
+  # Export the rootless Claude volume hourly; nginx serves only the exports.
   class { 'homelab::claudelogs':
     manage_service => $manage_services,
   }
