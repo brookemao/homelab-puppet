@@ -13,6 +13,7 @@ RequiresMountsFor="<%= $projects_dir %>" "<%= $output_dir %>"
 [Service]
 Type=simple
 User=<%= $user %>
+Group=nginx
 WorkingDirectory=<%= $output_dir %>
 UMask=0027
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
