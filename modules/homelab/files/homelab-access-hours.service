@@ -1,0 +1,9 @@
+[Unit]
+Description=Enforce Pacific daytime access to Cockpit and SSH
+After=time-sync.target
+Wants=time-sync.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/homelab-access-hours
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin

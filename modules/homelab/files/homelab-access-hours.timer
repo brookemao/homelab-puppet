@@ -1,0 +1,11 @@
+[Unit]
+Description=Disable Cockpit and SSH from midnight to 09:00 Pacific
+
+[Timer]
+OnCalendar=*-*-* 00,09:00:00 America/Vancouver
+OnBootSec=0
+AccuracySec=1s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -50,6 +50,37 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 
 ---
 
+## Cockpit and SSH access hours
+
+`homelab::access_hours` installs `homelab-access-hours.timer` to stop and
+runtime-mask `cockpit.socket`, `cockpit.service`, and `sshd.service` from
+**midnight to 9 AM Pacific**, then unmask and start Cockpit's socket and SSH
+at 9 AM. An installed `sshd.socket` is also blocked overnight. The timer and
+hour check both use **`America/Vancouver`**, independently of the host timezone.
+The calendar syntax follows [systemd's timer documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
+
+The schedule is enforced immediately on every Puppet apply and checked again
+at boot and after missed timer events. Native boot activation of these
+listeners stays disabled; the timer starts them during daytime. This prevents
+an overnight reboot from starting them before the schedule is checked.
+The baseline delegates Cockpit's service state to this class so Puppet cannot
+restart it overnight. `homelab::manage_services: false` installs the files
+without activating or enforcing the schedule.
+
+Apply using the usual bootstrap/Puppet workflow, then inspect it on the host:
+
+```bash
+sudo systemctl list-timers homelab-access-hours.timer
+sudo journalctl -u homelab-access-hours.service
+```
+
+SSH and Cockpit access will be unavailable during the overnight window;
+keep local console access for maintenance then. Stopping SSH blocks new
+connections; existing SSH sessions may survive according to sshd's unit policy.
+
+Run `bash tests/access-hours.sh` to check all 24 hours, optional SSH socket
+activation, and boot enablement using simulated commands without touching services.
+
 ## Project Structure
 
 ```text
