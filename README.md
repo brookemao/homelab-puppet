@@ -50,7 +50,7 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 
 ---
 
-## Cockpit and SSH access hours
+## Overnight access restrictions
 
 `homelab::access_hours` installs `homelab-access-hours.timer` to stop and
 runtime-mask `cockpit.socket`, `cockpit.service`, and `sshd.service` from
@@ -58,6 +58,25 @@ runtime-mask `cockpit.socket`, `cockpit.service`, and `sshd.service` from
 at 9 AM. An installed `sshd.socket` is also blocked overnight. The timer and
 hour check both use **`America/Vancouver`**, independently of the host timezone.
 The calendar syntax follows [systemd's timer documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
+
+`homelab-claude-history.path` also watches changes to
+`/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/history.jsonl`.
+After a write closes or the file is replaced, its service reads the last
+nonempty JSONL record. It stops `iapark`'s running **immich-tools devcontainer**
+only when the current time is midnight–9 AM Pacific and that record's timestamp
+is also in today's midnight–9 AM Pacific window. Older records, malformed or
+incomplete final records, and daytime changes do not trigger a stop. Numeric
+Unix millisecond timestamps are supported, along with Unix seconds and
+timezone-aware ISO timestamps. The date comparison uses `America/Vancouver`.
+
+The check runs as `iapark`, using that user's local rootless Podman storage.
+It identifies the external devcontainer by the exact name `immich-tools`, a
+generated `vsc-immich-tools-...` name, or a `devcontainer.local_folder` /
+`vsch.local.folder` label whose folder is named `immich-tools`. Matching running
+containers are stopped with a 10-second grace period. This repository does not
+create, reconfigure, or automatically restart the devcontainer at 9 AM.
+The path watcher does not act on unchanged history when it starts.
+See [systemd path units](https://www.freedesktop.org/software/systemd/man/latest/systemd.path.html).
 
 The schedule is enforced immediately on every Puppet apply and checked again
 at boot and after missed timer events. Native boot activation of these
@@ -72,14 +91,16 @@ Apply using the usual bootstrap/Puppet workflow, then inspect it on the host:
 ```bash
 sudo systemctl list-timers homelab-access-hours.timer
 sudo journalctl -u homelab-access-hours.service
+sudo systemctl status homelab-claude-history.path
+sudo journalctl -u homelab-claude-history.service
 ```
 
 SSH and Cockpit access will be unavailable during the overnight window;
 keep local console access for maintenance then. Stopping SSH blocks new
 connections; existing SSH sessions may survive according to sshd's unit policy.
 
-Run `bash tests/access-hours.sh` to check all 24 hours, optional SSH socket
-activation, and boot enablement using simulated commands without touching services.
+Run `python -B -m unittest discover -s tests` to check history parsing, Pacific
+date/time boundaries, and devcontainer selection without touching live containers.
 
 ## Project Structure
 
