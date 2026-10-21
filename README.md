@@ -60,8 +60,8 @@ hour check both use **`America/Vancouver`**, independently of the host timezone.
 The calendar syntax follows [systemd's timer documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
 
 `homelab-claude-history.timer` runs a Bash oneshot service every five minutes
-from 00:00 through 08:55 Pacific. The access-hours timer enables and starts it
-at midnight, then disables and stops it at 9 AM. Its enablement is runtime-only;
+from 23:00 through 08:55 Pacific. The access-hours timer enables and starts it
+at 11 PM, then disables and stops it at 9 AM. Its enablement is runtime-only;
 the access-hours service checks the schedule again after reboot and on every
 Puppet apply. The old `history.jsonl` path watcher is removed during migration.
 
@@ -69,19 +69,20 @@ The script recursively greps
 `/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects`
 for `"origin":{"kind":"human"}`, then uses `jq` to sort matching JSON records
 by timestamp, latest first. If the latest ISO 8601 timestamp is strictly after
-today's midnight in `America/Vancouver`, it kills `iapark`'s running
+the current window's 11 PM start in `America/Vancouver` (the previous date
+when checking after midnight), it kills `iapark`'s running
 **immich-tools devcontainer**. No matches or a missing projects directory do
 nothing; read errors, malformed JSON and invalid timestamps fail the check and
 are retried on the next tick. Fractional seconds are included in the comparison.
 
-The service runs as root to control its system timer, invoking Podman as
+The service runs as root, invoking Podman as
 `iapark` using that user's local rootless storage.
 It identifies the external devcontainer by the exact name `immich-tools`, a
 generated `vsc-immich-tools-...` name, or a `devcontainer.local_folder` /
 `vsch.local.folder` label whose folder is named `immich-tools`. Matching running
 containers are killed with `podman kill`. Checks continue every five minutes
 throughout the nighttime window, including after a successful kill. Once human
-activity after midnight is detected, any matching container restarted that
+activity after the window's 11 PM start is detected, any matching container restarted that
 night is killed again on the next check. At 9 AM the access-hours service
 disables and stops the timer. This repository does not
 create, reconfigure, or automatically restart the devcontainer at 9 AM.

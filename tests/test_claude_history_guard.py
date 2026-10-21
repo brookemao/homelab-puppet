@@ -77,13 +77,13 @@ class ClaudeGuardTest(unittest.TestCase):
             '{"origin":{"kind":"assistant"},"timestamp":"2026-10-20T08:00:00Z"}\n')
         self.assertEqual(self.run_script(), '')
 
-    def test_old_and_exact_midnight_do_not_kill(self):
-        for timestamp in ('2026-10-19T23:59:59-07:00', '2026-10-20T07:00:00Z'):
+    def test_old_and_exact_window_start_do_not_kill(self):
+        for timestamp in ('2026-10-19T22:59:59-07:00', '2026-10-20T06:00:00Z'):
             self.records(timestamp)
             self.assertEqual(self.run_script(), '')
 
     def test_latest_first_fractional_and_repeated_kills(self):
-        self.records('2026-10-20T07:00:00.001Z', '2026-10-19T20:00:00Z')
+        self.records('2026-10-20T06:00:00.001Z', '2026-10-19T20:00:00Z')
         calls = self.run_script()
         self.assertIn('-u iapark -- env HOME=/home/iapark XDG_RUNTIME_DIR=/run/user/1000', calls)
         self.assertIn('--remote=false kill target', calls)
@@ -99,6 +99,24 @@ class ClaudeGuardTest(unittest.TestCase):
         self.records('2026-10-20T08:00:00Z')
         self.env['TEST_DAY'] = '2026-10-21'
         self.assertEqual(self.run_script(), '')
+
+    def test_evening_cutoff_and_timer_enable(self):
+        self.env['TEST_HOUR'] = '23'
+        self.records('2026-10-20T22:59:59-07:00')
+        self.assertEqual(self.run_script(), '')
+        self.records('2026-10-20T23:00:00.001-07:00')
+        self.assertIn('--remote=false kill target', self.run_script())
+        self.log.unlink()
+        calls = self.run_script(self.access)
+        self.assertIn('enable --runtime --now homelab-claude-history.timer', calls)
+        self.assertNotIn('mask --runtime --now', calls)
+
+    def test_before_evening_window_is_inactive(self):
+        self.env['TEST_HOUR'] = '22'
+        self.records('2026-10-20T22:30:00-07:00')
+        self.assertEqual(self.run_script(), '')
+        self.assertIn('disable --runtime --now homelab-claude-history.timer',
+                      self.run_script(self.access))
 
     def test_daytime_guard_and_timer_disable(self):
         self.records('2026-10-20T08:00:00Z')
