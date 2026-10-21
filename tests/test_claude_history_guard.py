@@ -91,39 +91,42 @@ class ClaudeGuardTest(unittest.TestCase):
         self.log.unlink()
         # A restarted container is killed on the next tick even without a new message.
         self.assertIn('--remote=false kill target', self.run_script())
-        self.log.unlink()
-        self.assertIn('enable --runtime --now homelab-claude-history.timer',
-                      self.run_script(self.access))
 
     def test_previous_nights_activity_does_not_kill(self):
         self.records('2026-10-20T08:00:00Z')
         self.env['TEST_DAY'] = '2026-10-21'
         self.assertEqual(self.run_script(), '')
 
-    def test_evening_cutoff_and_timer_enable(self):
+    def test_evening_cutoff(self):
         self.env['TEST_HOUR'] = '23'
         self.records('2026-10-20T22:59:59-07:00')
         self.assertEqual(self.run_script(), '')
         self.records('2026-10-20T23:00:00.001-07:00')
         self.assertIn('--remote=false kill target', self.run_script())
-        self.log.unlink()
-        calls = self.run_script(self.access)
-        self.assertIn('enable --runtime --now homelab-claude-history.timer', calls)
-        self.assertNotIn('mask --runtime --now', calls)
 
     def test_before_evening_window_is_inactive(self):
         self.env['TEST_HOUR'] = '22'
         self.records('2026-10-20T22:30:00-07:00')
         self.assertEqual(self.run_script(), '')
-        self.assertIn('disable --runtime --now homelab-claude-history.timer',
-                      self.run_script(self.access))
 
-    def test_daytime_guard_and_timer_disable(self):
+    def test_daytime_guard(self):
         self.records('2026-10-20T08:00:00Z')
         self.env['TEST_HOUR'] = '09'
         self.assertEqual(self.run_script(), '')
-        self.assertIn('disable --runtime --now homelab-claude-history.timer',
-                      self.run_script(self.access))
+
+    def test_access_hours_only_controls_ssh_and_cockpit(self):
+        for hour in ('00', '08', '09', '22', '23'):
+            with self.subTest(hour=hour):
+                self.env['TEST_HOUR'] = hour
+                self.log.unlink(missing_ok=True)
+                calls = self.run_script(self.access)
+                self.assertNotIn('claude', calls)
+                if int(hour) < 9:
+                    self.assertIn('mask --runtime --now cockpit.socket cockpit.service sshd.service', calls)
+                    self.assertNotIn('systemctl start', calls)
+                else:
+                    self.assertNotIn('mask --runtime --now', calls)
+                    self.assertIn('start cockpit.socket sshd.service', calls)
 
     def test_no_target_keeps_checking(self):
         self.records('2026-10-20T08:00:00Z')
