@@ -3,7 +3,6 @@ set -euo pipefail
 
 # Keep this zone in sync with OnCalendar in homelab-access-hours.timer.
 hour=$(TZ=America/Vancouver date +%H)
-today=$(TZ=America/Vancouver date +%F)
 units=(cockpit.socket cockpit.service sshd.service)
 boot_units=(cockpit.socket sshd.service)
 
@@ -24,12 +23,7 @@ for unit in "${boot_units[@]}"; do
 done
 
 if (( 10#$hour < 9 )); then
-    # Do not rearm after a kill, including on Puppet applies or reboots.
-    if [[ -f "/var/lib/homelab-claude-history/killed-$today" ]]; then
-        systemctl disable --runtime --now homelab-claude-history.timer
-    else
-        systemctl enable --runtime --now homelab-claude-history.timer
-    fi
+    systemctl enable --runtime --now homelab-claude-history.timer
     # Mask as well as stop: socket activation and manual/dependency starts
     # must not reopen access. Runtime masks disappear on reboot.
     systemctl mask --runtime --now "${units[@]}"
