@@ -81,9 +81,13 @@ It identifies the external devcontainer by the exact name `immich-tools`, a
 generated `vsc-immich-tools-...` name, or a `devcontainer.local_folder` /
 `vsch.local.folder` label whose folder is named `immich-tools`. Matching running
 containers are killed with `podman kill`. Checks continue every five minutes
-throughout the nighttime window, including after a successful kill. Once human
-activity after the window's 11 PM start is detected, any matching container restarted that
-night is killed again on the next check. The timer stays active during daytime
+throughout the nighttime window, including after a successful kill. After a
+successful kill, the guard saves the triggering message's timestamp in
+`/var/lib/homelab-claude-history/last-killed-message`. Checks with the same latest
+message timestamp skip the kill, including after a reboot or container restart;
+a new human prompt with a different timestamp can trigger another kill. Failed
+kills and checks without a matching container do not update the saved timestamp.
+The timer stays active during daytime
 but schedules no checks between 9 AM and 11 PM. This repository does not
 create, reconfigure, or automatically restart the devcontainer at 9 AM.
 

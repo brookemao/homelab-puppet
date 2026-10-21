@@ -6,6 +6,8 @@ RequiresMountsFor=/home/iapark/.local/share/containers/storage/volumes/claude-ho
 
 [Service]
 Type=oneshot
+StateDirectory=homelab-claude-history
+StateDirectoryMode=0700
 # The script runs Podman as iapark to use that user's rootless storage.
 Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/sbin/homelab-claude-history

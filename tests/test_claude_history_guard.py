@@ -22,11 +22,14 @@ class ClaudeGuardTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.projects = self.root / 'projects'
         self.projects.mkdir()
+        self.state = self.root / 'state'
+        self.marker = self.state / 'last-killed-message'
         self.log = self.root / 'calls'
         self.bin = self.root / 'bin'
         self.bin.mkdir()
         self.env = dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}',
-                        CALLS=str(self.log), TEST_DAY='2026-10-20', TEST_HOUR='01',
+                        CALLS=str(self.log), STATE_DIRECTORY=str(self.state),
+                        TEST_DAY='2026-10-20', TEST_HOUR='01',
                         CONTAINERS=json.dumps([{'Id': 'target', 'Names': ['immich-tools']}]))
         self.command('date', '''case "$*" in
             +%F) echo "$TEST_DAY" ;;
@@ -82,15 +85,27 @@ class ClaudeGuardTest(unittest.TestCase):
             self.records(timestamp)
             self.assertEqual(self.run_script(), '')
 
-    def test_latest_first_fractional_and_repeated_kills(self):
+    def test_latest_first_fractional_and_deduplicated_kills(self):
         self.records('2026-10-20T06:00:00.001Z', '2026-10-19T20:00:00Z')
         calls = self.run_script()
         self.assertIn('-u iapark -- env HOME=/home/iapark XDG_RUNTIME_DIR=/run/user/1000', calls)
         self.assertIn('--remote=false kill target', calls)
         self.assertNotIn('systemctl', calls)
+        self.assertEqual(self.marker.read_text(), '2026-10-20T06:00:00.001Z\n')
         self.log.unlink()
-        # A restarted container is killed on the next tick even without a new message.
+        # A restarted container is left alone until a new prompt appears.
+        self.assertEqual(self.run_script(), '')
+        self.records('2026-10-20T06:00:00.002Z', '2026-10-20T06:00:00.001Z')
         self.assertIn('--remote=false kill target', self.run_script())
+        self.assertEqual(self.marker.read_text(), '2026-10-20T06:00:00.002Z\n')
+        self.log.unlink()
+        self.assertEqual(self.run_script(), '')
+
+    def test_saved_timestamp_survives_separate_runs(self):
+        self.records('2026-10-20T08:00:00Z')
+        self.state.mkdir()
+        self.marker.write_text('2026-10-20T08:00:00Z\n')
+        self.assertEqual(self.run_script(), '')
 
     def test_previous_nights_activity_does_not_kill(self):
         self.records('2026-10-20T08:00:00Z')
@@ -134,6 +149,11 @@ class ClaudeGuardTest(unittest.TestCase):
         calls = self.run_script()
         self.assertNotIn(' kill ', calls)
         self.assertNotIn('systemctl', calls)
+        self.assertFalse(self.marker.exists())
+        self.env['CONTAINERS'] = '[{"Id":"target","Names":["immich-tools"]}]'
+        self.log.unlink()
+        self.assertIn('--remote=false kill target', self.run_script())
+        self.assertEqual(self.marker.read_text(), '2026-10-20T08:00:00Z\n')
 
     def test_devcontainer_names_and_labels(self):
         self.records('2026-10-20T08:00:00Z')
@@ -149,9 +169,19 @@ class ClaudeGuardTest(unittest.TestCase):
         self.records('2026-10-20T08:00:00Z')
         self.env['KILL_STATUS'] = '1'
         self.assertNotIn('systemctl', self.run_script(success=False))
+        self.assertFalse(self.marker.exists())
         self.log.unlink()
         self.env['KILL_STATUS'] = '0'
         self.assertIn('--remote=false kill target', self.run_script())
+        self.assertEqual(self.marker.read_text(), '2026-10-20T08:00:00Z\n')
+
+    def test_failed_kill_preserves_previous_prompt_timestamp(self):
+        self.records('2026-10-20T08:00:00Z')
+        self.state.mkdir()
+        self.marker.write_text('2026-10-20T07:00:00Z\n')
+        self.env['KILL_STATUS'] = '1'
+        self.run_script(success=False)
+        self.assertEqual(self.marker.read_text(), '2026-10-20T07:00:00Z\n')
 
     def test_malformed_json_and_timestamp_fail_without_kill(self):
         (self.projects / 'broken.jsonl').write_text('{"origin":{"kind":"human"}\n')
