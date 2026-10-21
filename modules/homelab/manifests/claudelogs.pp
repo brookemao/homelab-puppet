@@ -7,14 +7,14 @@
 # @param user Export user (root by default to access both directories)
 # @param projects_dir Claude transcript source directory
 # @param output_dir HTML document root shared with homelab::nginx
-# @param manage_service Whether to enable and start the claudelogs watcher
+# @param manage_service Whether to enable and start the watcher and daily restart timer
 class homelab::claudelogs (
   String[1]            $user           = 'root',
   Stdlib::Absolutepath $projects_dir   = '/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects/',
   Stdlib::Absolutepath $output_dir     = '/home/share/claudelogs',
   Boolean              $manage_service = true,
 ) {
-  stdlib::ensure_packages(['uv'])
+  stdlib::ensure_packages(['uv', 'tzdata'])
 
   # Do not require the whole nginx class: its service must be able to start
   # after the document root and SELinux labels are ready.
@@ -80,6 +80,17 @@ class homelab::claudelogs (
     notify  => Exec['claudelogs-daemon-reload'],
   }
 
+  ['claudelogs-restart.service', 'claudelogs-restart.timer'].each |$unit| {
+    file { "/etc/systemd/system/${unit}":
+      ensure => file,
+      owner  => 'root',
+      group  => 'root',
+      mode   => '0644',
+      source => "puppet:///modules/homelab/${unit}",
+      notify => Exec['claudelogs-daemon-reload'],
+    }
+  }
+
   exec { 'claudelogs-daemon-reload':
     command     => 'systemctl daemon-reload',
     path        => ['/usr/bin', '/bin'],
@@ -94,6 +105,18 @@ class homelab::claudelogs (
       require   => [
         File[$output_dir],
         File['/etc/cron.d/claudelogs'],
+        Exec['claudelogs-daemon-reload'],
+      ],
+    }
+
+    service { 'claudelogs-restart.timer':
+      ensure    => running,
+      enable    => true,
+      subscribe => File['/etc/systemd/system/claudelogs-restart.timer'],
+      require   => [
+        Package['tzdata'],
+        Service['claudelogs'],
+        File['/etc/systemd/system/claudelogs-restart.service'],
         Exec['claudelogs-daemon-reload'],
       ],
     }

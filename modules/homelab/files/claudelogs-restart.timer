@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart the Claude conversation watcher daily at 03:00 Pacific
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/Vancouver
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

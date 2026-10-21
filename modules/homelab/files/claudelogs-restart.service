@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart the Claude conversation watcher to release its memory
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart claudelogs.service
