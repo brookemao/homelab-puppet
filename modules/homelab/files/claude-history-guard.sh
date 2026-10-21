@@ -3,6 +3,7 @@ set -euo pipefail
 
 export TZ=America/Vancouver
 projects=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects
+state=${STATE_DIRECTORY:-/var/lib/homelab-claude-history}
 today=$(date +%F)
 hour=$(date +%H)
 
@@ -38,6 +39,16 @@ if (( latest_ns <= limit_ns )); then
     exit 0
 fi
 
+# Persist the message timestamp, rather than the wall-clock time of the kill,
+# so a restarted container is left alone until another human prompt appears.
+mkdir -p "$state"
+if [[ -f "$state/last-killed-message" ]]; then
+    last_killed=$(cat "$state/last-killed-message")
+    if [[ "$last_killed" == "$latest" ]]; then
+        exit 0
+    fi
+fi
+
 # Only access iapark's local rootless Podman storage, never root's or a remote.
 uid=$(id -u iapark)
 podman() {
@@ -62,3 +73,8 @@ fi
 mapfile -t ids <<< "$targets"
 echo "Overnight Claude activity ($latest): killing ${#ids[@]} immich-tools container(s)."
 podman kill "${ids[@]}"
+
+# Only deduplicate successful kills. Missing containers and failures retry.
+# Rename atomically so an interrupted write cannot leave a partial timestamp.
+printf '%s\n' "$latest" > "$state/last-killed-message.tmp"
+mv -f "$state/last-killed-message.tmp" "$state/last-killed-message"
