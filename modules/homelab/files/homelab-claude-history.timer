@@ -3,6 +3,7 @@ Description=Check for overnight human Claude messages every five minutes Pacific
 
 [Timer]
 OnCalendar=*-*-* 00..08:00/5:00 America/Vancouver
+OnCalendar=*-*-* 23:00/5:00 America/Vancouver
 AccuracySec=1s
 
 [Install]

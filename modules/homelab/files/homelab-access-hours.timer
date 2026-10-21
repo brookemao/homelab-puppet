@@ -1,8 +1,8 @@
 [Unit]
-Description=Disable Cockpit and SSH from midnight to 09:00 Pacific
+Description=Schedule Claude shutoff at 23:00 and access restrictions at midnight Pacific
 
 [Timer]
-OnCalendar=*-*-* 00,09:00:00 America/Vancouver
+OnCalendar=*-*-* 00,09,23:00:00 America/Vancouver
 OnBootSec=0
 AccuracySec=1s
 Persistent=true
