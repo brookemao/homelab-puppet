@@ -402,12 +402,16 @@ to see new messages. nginx continues to serve static HTML; full-archive search
 requires the separate `serve` mode and is not enabled here.
 
 systemd starts the watcher at boot, restarts it on failure, and captures its output
-in the journal. The service must be able to download the latest tool from PyPI at
-startup. Puppet removes the former `/etc/cron.d/claudelogs` job and reloads systemd
+in the journal. `claudelogs-restart.timer` also restarts the watcher daily at
+**03:00 Pacific (`America/Vancouver`)** to release accumulated process memory.
+The timer invokes a separate oneshot service that runs
+`systemctl restart claudelogs.service`. The service must be able to download the
+latest tool from PyPI at startup. Puppet removes the former `/etc/cron.d/claudelogs`
+job and reloads systemd
 when the unit changes; other cron jobs and the shared cron daemon are left alone.
 Override `homelab::claudelogs::{user,projects_dir,output_dir}` through Hiera if needed;
 nginx uses the same `output_dir`. The baseline `manage_services` flag also controls
-management of `claudelogs.service`.
+management of `claudelogs.service` and the daily restart timer.
 
 nginx serves the generated `index.html` and project/session pages at
 `https://claudechats.brookemao.ca`, using the existing wildcard Let's Encrypt certificate
@@ -426,6 +430,8 @@ The first export starts when the service starts. After applying, check it with:
 
 ```bash
 sudo systemctl status claudelogs
+sudo systemctl list-timers claudelogs-restart.timer
+sudo journalctl -u claudelogs-restart.service
 sudo journalctl -u claudelogs -f
 sudo nginx -t
 curl -I https://claudechats.brookemao.ca/  # must reject a request without a client certificate
