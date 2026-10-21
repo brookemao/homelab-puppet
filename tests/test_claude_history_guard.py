@@ -22,8 +22,6 @@ class ClaudeGuardTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.projects = self.root / 'projects'
         self.projects.mkdir()
-        self.state = self.root / 'state'
-        self.state.mkdir()
         self.log = self.root / 'calls'
         self.bin = self.root / 'bin'
         self.bin.mkdir()
@@ -50,12 +48,11 @@ class ClaudeGuardTest(unittest.TestCase):
         source = (FILES / 'claude-history-guard.sh').read_text()
         source = source.replace(
             '/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects',
-            str(self.projects)).replace('/var/lib/homelab-claude-history', str(self.state))
+            str(self.projects))
         self.guard = self.root / 'guard.sh'
         self.guard.write_text(source)
         self.access = self.root / 'access.sh'
-        self.access.write_text((FILES / 'access-hours.sh').read_text().replace(
-            '/var/lib/homelab-claude-history', str(self.state)))
+        self.access.write_text((FILES / 'access-hours.sh').read_text())
 
     def command(self, name, source):
         path = self.bin / name
@@ -85,20 +82,23 @@ class ClaudeGuardTest(unittest.TestCase):
             self.records(timestamp)
             self.assertEqual(self.run_script(), '')
 
-    def test_latest_first_fractional_and_once_per_night(self):
+    def test_latest_first_fractional_and_repeated_kills(self):
         self.records('2026-10-20T07:00:00.001Z', '2026-10-19T20:00:00Z')
         calls = self.run_script()
         self.assertIn('-u iapark -- env HOME=/home/iapark XDG_RUNTIME_DIR=/run/user/1000', calls)
         self.assertIn('--remote=false kill target', calls)
-        self.assertIn('disable --runtime --now homelab-claude-history.timer', calls)
-        self.assertTrue((self.state / 'killed-2026-10-20').exists())
+        self.assertNotIn('systemctl', calls)
         self.log.unlink()
-        self.assertNotIn('runuser', self.run_script())
-        self.assertNotIn('enable --runtime --now', self.run_script(self.access))
-        self.env['TEST_DAY'] = '2026-10-21'
+        # A restarted container is killed on the next tick even without a new message.
+        self.assertIn('--remote=false kill target', self.run_script())
         self.log.unlink()
         self.assertIn('enable --runtime --now homelab-claude-history.timer',
                       self.run_script(self.access))
+
+    def test_previous_nights_activity_does_not_kill(self):
+        self.records('2026-10-20T08:00:00Z')
+        self.env['TEST_DAY'] = '2026-10-21'
+        self.assertEqual(self.run_script(), '')
 
     def test_daytime_guard_and_timer_disable(self):
         self.records('2026-10-20T08:00:00Z')
@@ -113,7 +113,6 @@ class ClaudeGuardTest(unittest.TestCase):
         calls = self.run_script()
         self.assertNotIn(' kill ', calls)
         self.assertNotIn('systemctl', calls)
-        self.assertFalse(any(self.state.iterdir()))
 
     def test_devcontainer_names_and_labels(self):
         self.records('2026-10-20T08:00:00Z')
@@ -125,11 +124,13 @@ class ClaudeGuardTest(unittest.TestCase):
         ])
         self.assertIn('kill name label windows', self.run_script())
 
-    def test_kill_failure_does_not_disable_or_mark(self):
+    def test_kill_failure_keeps_checking(self):
         self.records('2026-10-20T08:00:00Z')
         self.env['KILL_STATUS'] = '1'
         self.assertNotIn('systemctl', self.run_script(success=False))
-        self.assertFalse(any(self.state.iterdir()))
+        self.log.unlink()
+        self.env['KILL_STATUS'] = '0'
+        self.assertIn('--remote=false kill target', self.run_script())
 
     def test_malformed_json_and_timestamp_fail_without_kill(self):
         (self.projects / 'broken.jsonl').write_text('{"origin":{"kind":"human"}\n')

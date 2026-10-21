@@ -3,17 +3,11 @@ set -euo pipefail
 
 export TZ=America/Vancouver
 projects=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects
-state=/var/lib/homelab-claude-history
 today=$(date +%F)
 hour=$(date +%H)
-timer=homelab-claude-history.timer
 
 # Also enforce the window on manual starts and delayed timer activations.
 if (( 10#$hour >= 9 )); then
-    exit 0
-fi
-if [[ -f "$state/killed-$today" ]]; then
-    systemctl disable --runtime --now "$timer"
     exit 0
 fi
 [[ -d "$projects" ]] || exit 0
@@ -63,9 +57,3 @@ fi
 mapfile -t ids <<< "$targets"
 echo "Overnight Claude activity ($latest): killing ${#ids[@]} immich-tools container(s)."
 podman kill "${ids[@]}"
-
-# Record success before disabling: retries, reboots and Puppet applies must
-# never rearm the timer in this same nighttime window.
-mkdir -p "$state"
-touch "$state/killed-$today"
-systemctl disable --runtime --now "$timer"

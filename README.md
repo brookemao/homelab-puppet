@@ -79,12 +79,11 @@ The service runs as root to control its system timer, invoking Podman as
 It identifies the external devcontainer by the exact name `immich-tools`, a
 generated `vsc-immich-tools-...` name, or a `devcontainer.local_folder` /
 `vsch.local.folder` label whose folder is named `immich-tools`. Matching running
-containers are killed with `podman kill`. After a successful kill, the script
-records `/var/lib/homelab-claude-history/killed-YYYY-MM-DD`, then disables and
-stops the five-minute timer. This prevents another kill in the same nighttime
-window even after reboot or a Puppet apply. The following midnight uses a new
-date and enables the timer again. If no matching container is running, checks
-continue until a kill succeeds or the window ends. This repository does not
+containers are killed with `podman kill`. Checks continue every five minutes
+throughout the nighttime window, including after a successful kill. Once human
+activity after midnight is detected, any matching container restarted that
+night is killed again on the next check. At 9 AM the access-hours service
+disables and stops the timer. This repository does not
 create, reconfigure, or automatically restart the devcontainer at 9 AM.
 
 The schedule is enforced immediately on every Puppet apply and checked again
