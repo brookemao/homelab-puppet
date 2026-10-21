@@ -60,10 +60,10 @@ hour check both use **`America/Vancouver`**, independently of the host timezone.
 The calendar syntax follows [systemd's timer documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
 
 `homelab-claude-history.timer` runs a Bash oneshot service every five minutes
-from 23:00 through 08:55 Pacific. The access-hours timer enables and starts it
-at 11 PM, then disables and stops it at 9 AM. Its enablement is runtime-only;
-the access-hours service checks the schedule again after reboot and on every
-Puppet apply. The old `history.jsonl` path watcher is removed during migration.
+from 23:00 through 08:55 Pacific. Puppet keeps this timer running and enabled
+at boot; its own calendar controls the overnight schedule independently of
+the SSH/Cockpit access-hours service. The guard also checks the current hour
+before acting. The old `history.jsonl` path watcher is removed during migration.
 
 The script recursively greps
 `/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects`
@@ -83,8 +83,8 @@ generated `vsc-immich-tools-...` name, or a `devcontainer.local_folder` /
 containers are killed with `podman kill`. Checks continue every five minutes
 throughout the nighttime window, including after a successful kill. Once human
 activity after the window's 11 PM start is detected, any matching container restarted that
-night is killed again on the next check. At 9 AM the access-hours service
-disables and stops the timer. This repository does not
+night is killed again on the next check. The timer stays active during daytime
+but schedules no checks between 9 AM and 11 PM. This repository does not
 create, reconfigure, or automatically restart the devcontainer at 9 AM.
 
 The schedule is enforced immediately on every Puppet apply and checked again

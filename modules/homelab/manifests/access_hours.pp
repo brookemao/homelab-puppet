@@ -65,13 +65,9 @@ class homelab::access_hours (
       require => [
         Package['openssh-server'],
         Package['bash'],
-        Package['jq'],
         Package['tzdata'],
         File['/usr/local/sbin/homelab-access-hours'],
-        File['/usr/local/sbin/homelab-claude-history'],
         File['/etc/systemd/system/homelab-access-hours.service'],
-        File['/etc/systemd/system/homelab-claude-history.service'],
-        File['/etc/systemd/system/homelab-claude-history.timer'],
         Exec['systemd-daemon-reload-access-hours'],
       ],
     }
@@ -81,6 +77,21 @@ class homelab::access_hours (
       enable    => true,
       require   => Exec['enforce-access-hours'],
       subscribe => File['/etc/systemd/system/homelab-access-hours.timer'],
+    }
+
+    # Keep the timer enabled at boot; its own calendar limits checks to 23:00–09:00.
+    service { 'homelab-claude-history.timer':
+      ensure    => running,
+      enable    => true,
+      require   => [
+        Package['bash'],
+        Package['jq'],
+        Package['tzdata'],
+        File['/usr/local/sbin/homelab-claude-history'],
+        File['/etc/systemd/system/homelab-claude-history.service'],
+        Exec['systemd-daemon-reload-access-hours'],
+      ],
+      subscribe => File['/etc/systemd/system/homelab-claude-history.timer'],
     }
   }
 }
