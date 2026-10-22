@@ -81,7 +81,7 @@ class ClaudeGuardTest(unittest.TestCase):
         self.assertEqual(self.run_script(), '')
 
     def test_old_and_exact_window_start_do_not_kill(self):
-        for timestamp in ('2026-10-19T22:59:59-07:00', '2026-10-20T06:00:00Z'):
+        for timestamp in ('2026-10-19T21:59:59-07:00', '2026-10-20T05:00:00Z'):
             self.records(timestamp)
             self.assertEqual(self.run_script(), '')
 
@@ -113,21 +113,32 @@ class ClaudeGuardTest(unittest.TestCase):
         self.assertEqual(self.run_script(), '')
 
     def test_evening_cutoff(self):
-        self.env['TEST_HOUR'] = '23'
-        self.records('2026-10-20T22:59:59-07:00')
+        self.env['TEST_HOUR'] = '22'
+        self.records('2026-10-20T21:59:59-07:00')
         self.assertEqual(self.run_script(), '')
-        self.records('2026-10-20T23:00:00.001-07:00')
+        self.records('2026-10-20T22:00:00.001-07:00')
         self.assertIn('--remote=false kill target', self.run_script())
 
     def test_before_evening_window_is_inactive(self):
-        self.env['TEST_HOUR'] = '22'
-        self.records('2026-10-20T22:30:00-07:00')
+        self.env['TEST_HOUR'] = '21'
+        self.records('2026-10-20T21:30:00-07:00')
         self.assertEqual(self.run_script(), '')
 
-    def test_daytime_guard(self):
+    def test_restrictions_end_at_6pm(self):
         self.records('2026-10-20T08:00:00Z')
-        self.env['TEST_HOUR'] = '09'
+        self.env['TEST_HOUR'] = '18'
         self.assertEqual(self.run_script(), '')
+
+    def test_morning_and_afternoon_use_previous_evening_cutoff(self):
+        for hour in ('09', '12', '17'):
+            with self.subTest(hour=hour):
+                self.env['TEST_HOUR'] = hour
+                self.marker.unlink(missing_ok=True)
+                self.log.unlink(missing_ok=True)
+                self.records('2026-10-19T21:59:59-07:00')
+                self.assertEqual(self.run_script(), '')
+                self.records('2026-10-19T22:00:00.001-07:00')
+                self.assertIn('--remote=false kill target', self.run_script())
 
     def test_access_hours_only_controls_ssh_and_cockpit(self):
         for hour in ('00', '08', '09', '22', '23'):

@@ -8,7 +8,7 @@ today=$(date +%F)
 hour=$(date +%H)
 
 # Also enforce the window on manual starts and delayed timer activations.
-if (( 10#$hour >= 9 && 10#$hour < 23 )); then
+if (( 10#$hour >= 18 && 10#$hour < 22 )); then
     exit 0
 fi
 [[ -d "$projects" ]] || exit 0
@@ -27,11 +27,11 @@ latest=$(jq -rs 'sort_by(.timestamp) | reverse | .[0].timestamp // empty' <<< "$
 [[ -n "$latest" ]] || exit 0
 
 # GNU date accepts ISO 8601 timestamps including UTC Z and fractional seconds.
-# Use nanoseconds so a message just after 23:00 still exceeds the limit.
+# Use nanoseconds so a message just after 22:00 still exceeds the limit.
 latest_ns=$(date --date="$latest" +%s%N)
-# After midnight, the current window began at 23:00 on the previous date.
-limit="$today 23:00:00"
-if (( 10#$hour < 9 )); then
+# Before 18:00, the current window began at 22:00 on the previous date.
+limit="$today 22:00:00"
+if (( 10#$hour < 18 )); then
     limit="$limit yesterday"
 fi
 limit_ns=$(date --date="$limit" +%s%N)

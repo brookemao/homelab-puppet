@@ -60,8 +60,8 @@ hour check both use **`America/Vancouver`**, independently of the host timezone.
 The calendar syntax follows [systemd's timer documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
 
 `homelab-claude-history.timer` runs a Bash oneshot service every five minutes
-from 23:00 through 08:55 Pacific. Puppet keeps this timer running and enabled
-at boot; its own calendar controls the overnight schedule independently of
+from 22:00 through 17:55 the next day Pacific (10 PM–6 PM). Puppet keeps this
+timer running and enabled at boot; its own calendar controls the restriction window independently of
 the SSH/Cockpit access-hours service. The guard also checks the current hour
 before acting. The old `history.jsonl` path watcher is removed during migration.
 
@@ -69,8 +69,8 @@ The script recursively greps
 `/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects`
 for `"origin":{"kind":"human"}`, then uses `jq` to sort matching JSON records
 by timestamp, latest first. If the latest ISO 8601 timestamp is strictly after
-the current window's 11 PM start in `America/Vancouver` (the previous date
-when checking after midnight), it kills `iapark`'s running
+the current window's 10 PM start in `America/Vancouver` (the previous date
+when checking before 6 PM), it kills `iapark`'s running
 **immich-tools devcontainer**. No matches or a missing projects directory do
 nothing; read errors, malformed JSON and invalid timestamps fail the check and
 are retried on the next tick. Fractional seconds are included in the comparison.
@@ -87,9 +87,9 @@ successful kill, the guard saves the triggering message's timestamp in
 message timestamp skip the kill, including after a reboot or container restart;
 a new human prompt with a different timestamp can trigger another kill. Failed
 kills and checks without a matching container do not update the saved timestamp.
-The timer stays active during daytime
-but schedules no checks between 9 AM and 11 PM. This repository does not
-create, reconfigure, or automatically restart the devcontainer at 9 AM.
+The timer stays active outside the restriction window
+but schedules no checks between 6 PM and 10 PM. This repository does not
+create, reconfigure, or automatically restart the devcontainer at 6 PM.
 
 The schedule is enforced immediately on every Puppet apply and checked again
 at boot and after missed timer events. Native boot activation of these
