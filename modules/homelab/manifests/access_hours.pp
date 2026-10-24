@@ -79,7 +79,7 @@ class homelab::access_hours (
       subscribe => File['/etc/systemd/system/homelab-access-hours.timer'],
     }
 
-    # Keep the timer enabled at boot; its own calendar limits checks to 22:00–18:00.
+    # The calendar ends checks at 18:00 weekdays and 09:00 weekends; both start at 22:00.
     service { 'homelab-claude-history.timer':
       ensure    => running,
       enable    => true,
