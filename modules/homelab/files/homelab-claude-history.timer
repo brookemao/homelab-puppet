@@ -1,8 +1,9 @@
 [Unit]
-Description=Check human Claude messages every five minutes from 22:00 to 18:00 Pacific
+Description=Check human Claude messages during weekday and weekend restriction hours Pacific
 
 [Timer]
-OnCalendar=*-*-* 00..17:00/5:00 America/Vancouver
+OnCalendar=*-*-* 00..08:00/5:00 America/Vancouver
+OnCalendar=Mon..Fri *-*-* 09..17:00/5:00 America/Vancouver
 OnCalendar=*-*-* 22..23:00/5:00 America/Vancouver
 AccuracySec=1s
 

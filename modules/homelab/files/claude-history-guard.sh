@@ -6,9 +6,14 @@ projects=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/
 state=${STATE_DIRECTORY:-/var/lib/homelab-claude-history}
 today=$(date +%F)
 hour=$(date +%H)
+weekday=$(date --date="$today" +%u)
+end_hour=18
+if (( weekday >= 6 )); then
+    end_hour=9
+fi
 
 # Also enforce the window on manual starts and delayed timer activations.
-if (( 10#$hour >= 18 && 10#$hour < 22 )); then
+if (( 10#$hour >= end_hour && 10#$hour < 22 )); then
     exit 0
 fi
 [[ -d "$projects" ]] || exit 0
@@ -29,9 +34,9 @@ latest=$(jq -rs 'sort_by(.timestamp) | reverse | .[0].timestamp // empty' <<< "$
 # GNU date accepts ISO 8601 timestamps including UTC Z and fractional seconds.
 # Use nanoseconds so a message just after 22:00 still exceeds the limit.
 latest_ns=$(date --date="$latest" +%s%N)
-# Before 18:00, the current window began at 22:00 on the previous date.
+# Before the morning/daytime cutoff, the window began the previous evening.
 limit="$today 22:00:00"
-if (( 10#$hour < 18 )); then
+if (( 10#$hour < 22 )); then
     limit="$limit yesterday"
 fi
 limit_ns=$(date --date="$limit" +%s%N)

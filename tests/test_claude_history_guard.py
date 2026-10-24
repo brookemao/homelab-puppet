@@ -154,6 +154,37 @@ class ClaudeGuardTest(unittest.TestCase):
                     self.assertNotIn('mask --runtime --now', calls)
                     self.assertIn('start cockpit.socket sshd.service', calls)
 
+    def test_weekend_allowed_hours_and_nighttime_kills(self):
+        for day, previous in (('2026-10-24', '2026-10-23'),
+                              ('2026-10-25', '2026-10-24')):
+            for hour in ('00', '08', '09', '12', '17', '18', '21', '22', '23'):
+                with self.subTest(day=day, hour=hour):
+                    self.env.update(TEST_DAY=day, TEST_HOUR=hour)
+                    self.marker.unlink(missing_ok=True)
+                    self.log.unlink(missing_ok=True)
+                    prompt_day = day if int(hour) >= 22 else previous
+                    self.records(f'{prompt_day}T22:00:00.001-07:00')
+                    calls = self.run_script()
+                    if 9 <= int(hour) < 22:
+                        self.assertEqual(calls, '')
+                        self.assertFalse(self.marker.exists())
+                    else:
+                        self.assertIn('--remote=false kill target', calls)
+
+    def test_sunday_night_restrictions_continue_into_monday_afternoon(self):
+        self.env['TEST_DAY'] = '2026-10-26'
+        for hour in ('09', '12', '17', '18'):
+            with self.subTest(hour=hour):
+                self.env['TEST_HOUR'] = hour
+                self.marker.unlink(missing_ok=True)
+                self.log.unlink(missing_ok=True)
+                self.records('2026-10-25T22:00:00.001-07:00')
+                calls = self.run_script()
+                if int(hour) < 18:
+                    self.assertIn('--remote=false kill target', calls)
+                else:
+                    self.assertEqual(calls, '')
+
     def test_no_target_keeps_checking(self):
         self.records('2026-10-20T08:00:00Z')
         self.env['CONTAINERS'] = '[{"Id":"other","Names":["immich"]}]'
