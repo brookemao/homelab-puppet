@@ -64,7 +64,8 @@
 #   (homelab passes the shared lookup through).
 # @param install_dir Directory holding ui-config.json and the Sharp chat template (bind-mounted read-only).
 # @param podman_command Absolute path to podman (systemd ExecStart needs a full path)
-# @param manage_service Whether to enable and start the systemd unit
+# @param manage_service Whether to manage the systemd unit's state
+# @param service_enabled Whether the managed unit should be running and enabled
 # @param service_name Name of the systemd unit and of the container
 #
 class llama (
@@ -84,6 +85,7 @@ class llama (
   Llama::Absolutepath  $install_dir           = '/opt/llama-app',
   Llama::Absolutepath  $podman_command        = '/usr/bin/podman',
   Boolean              $manage_service        = true,
+  Boolean              $service_enabled       = true,
   String[1]            $service_name          = 'llama',
 ) {
   $ui_config = "${install_dir}/ui-config.json"
@@ -179,8 +181,8 @@ class llama (
     # Restarting on a file change stops then starts the unit, i.e. the
     # container is recreated with the new settings.
     service { $service_name:
-      ensure    => running,
-      enable    => true,
+      ensure    => $service_enabled ? { true => running, false => stopped },
+      enable    => $service_enabled,
       subscribe => [
         File[$ui_config],
         File[$chat_template],

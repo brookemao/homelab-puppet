@@ -6,14 +6,19 @@ projects=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/
 state=${STATE_DIRECTORY:-/var/lib/homelab-claude-history}
 today=$(date +%F)
 hour=$(date +%H)
+clock=$(date +%H%M)
 weekday=$(date --date="$today" +%u)
+start_clock=2200
+if [[ $today == 2026-10-26 ]]; then
+    start_clock=2230
+fi
 end_hour=18
 if (( weekday >= 6 )); then
     end_hour=9
 fi
 
 # Also enforce the window on manual starts and delayed timer activations.
-if (( 10#$hour >= end_hour && 10#$hour < 22 )); then
+if (( 10#$hour >= end_hour && 10#$clock < start_clock )); then
     exit 0
 fi
 [[ -d "$projects" ]] || exit 0
@@ -35,10 +40,15 @@ latest=$(jq -rs 'sort_by(.timestamp) | reverse | .[0].timestamp // empty' <<< "$
 # Use nanoseconds so a message just after 22:00 still exceeds the limit.
 latest_ns=$(date --date="$latest" +%s%N)
 # Before the morning/daytime cutoff, the window began the previous evening.
-limit="$today 22:00:00"
-if (( 10#$hour < 22 )); then
-    limit="$limit yesterday"
+limit_day=$today
+if (( 10#$clock < start_clock )); then
+    limit_day=$(date --date="$today yesterday" +%F)
 fi
+limit_clock=22:00:00
+if [[ $limit_day == 2026-10-26 ]]; then
+    limit_clock=22:30:00
+fi
+limit="$limit_day $limit_clock"
 limit_ns=$(date --date="$limit" +%s%N)
 if (( latest_ns <= limit_ns )); then
     exit 0

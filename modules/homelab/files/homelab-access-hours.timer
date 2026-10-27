@@ -3,6 +3,8 @@ Description=Disable Cockpit and SSH from midnight to 09:00 Pacific
 
 [Timer]
 OnCalendar=*-*-* 00,09:00:00 America/Vancouver
+# One-day earlier cutoff; the normal midnight schedule resumes afterward.
+OnCalendar=2026-10-26 22:30:00 America/Vancouver
 OnBootSec=0
 AccuracySec=1s
 Persistent=true
