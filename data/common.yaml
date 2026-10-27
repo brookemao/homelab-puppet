@@ -19,6 +19,7 @@ immich::ml_acceleration: 'cpu'
 
 # Uncensored OrcaRouter build for open-ended chat
 llama::model: 'Qwen3.8-27B-Uncensored-OrcaRouter-Q6_K.gguf'
+llama::service_enabled: false
 
 # Vision encoder for the chat model
 llama::mmproj: 'Qwen3.8-27B-mmproj-BF16.gguf'

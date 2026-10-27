@@ -2,7 +2,11 @@
 set -euo pipefail
 
 # Keep this zone in sync with OnCalendar in homelab-access-hours.timer.
-hour=$(TZ=America/Vancouver date +%H)
+read -r today clock <<< "$(TZ=America/Vancouver date '+%F %H%M')"
+blocked=false
+if (( 10#$clock < 900 )) || [[ $today == 2026-10-26 && $clock > 2229 ]]; then
+    blocked=true
+fi
 units=(cockpit.socket cockpit.service sshd.service)
 boot_units=(cockpit.socket sshd.service)
 
@@ -22,7 +26,7 @@ for unit in "${boot_units[@]}"; do
     fi
 done
 
-if (( 10#$hour < 9 )); then
+if $blocked; then
     # Mask as well as stop: socket activation and manual/dependency starts
     # must not reopen access. Runtime masks disappear on reboot.
     systemctl mask --runtime --now "${units[@]}"

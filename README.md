@@ -52,6 +52,12 @@ OpenVox maintains complete compatibility with declarative manifests and Hiera da
 
 ## Overnight access restrictions
 
+For **October 26, 2026 only**, access is allowed until **10:30 PM Pacific**.
+SSH and Cockpit are blocked from then until 9 AM October 27. Claude's
+restriction window also starts at 10:30 PM that evening, ending at its normal
+weekday cutoff of 6 PM October 27. Subsequent evenings retain the normal
+10 PM Claude cutoff; SSH and Cockpit return to their midnight–9 AM schedule.
+
 `homelab::access_hours` installs `homelab-access-hours.timer` to stop and
 runtime-mask `cockpit.socket`, `cockpit.service`, and `sshd.service` from
 **midnight to 9 AM Pacific**, then unmask and start Cockpit's socket and SSH
@@ -667,6 +673,9 @@ Caveats:
 ---
 
 ## Managing Llama
+
+Llama is currently stopped and disabled by `llama::service_enabled: false` in
+`data/common.yaml`. Set it to `true` and apply Puppet to re-enable it.
 
 Puppet writes a systemd unit at `/etc/systemd/system/llama.service` plus the
 Web UI defaults at `/opt/llama-app/ui-config.json` (mode `0600`, carries both
