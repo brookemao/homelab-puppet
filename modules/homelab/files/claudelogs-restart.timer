@@ -2,7 +2,7 @@
 Description=Restart the Claude conversation watcher daily at 03:00 Pacific
 
 [Timer]
-OnCalendar=*-*-* 03:00:00 America/Vancouver
+OnCalendar=*-*-* 03:00:00 America/Los_Angeles
 AccuracySec=1s
 
 [Install]

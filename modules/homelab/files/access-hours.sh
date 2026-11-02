@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Keep this zone in sync with OnCalendar in homelab-access-hours.timer.
-read -r today clock <<< "$(TZ=America/Vancouver date '+%F %H%M')"
+read -r today clock <<< "$(TZ=America/Los_Angeles date '+%F %H%M')"
 blocked=false
 if (( 10#$clock < 900 )) || [[ $today == 2026-10-26 && $clock > 2229 ]]; then
     blocked=true

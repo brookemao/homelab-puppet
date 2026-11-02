@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-export TZ=America/Vancouver
+export TZ=America/Los_Angeles
 projects=/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects
 state=${STATE_DIRECTORY:-/var/lib/homelab-claude-history}
 today=$(date +%F)

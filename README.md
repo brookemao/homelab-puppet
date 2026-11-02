@@ -62,12 +62,12 @@ weekday cutoff of 6 PM October 27. Subsequent evenings retain the normal
 runtime-mask `cockpit.socket`, `cockpit.service`, and `sshd.service` from
 **midnight to 9 AM Pacific**, then unmask and start Cockpit's socket and SSH
 at 9 AM. An installed `sshd.socket` is also blocked overnight. The timer and
-hour check both use **`America/Vancouver`**, independently of the host timezone.
+hour check both use **`America/Los_Angeles`**, independently of the host timezone.
 The calendar syntax follows [systemd's timer documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
 
 `homelab-claude-history.timer` runs a Bash oneshot service every five minutes
 from 22:00 each evening, ending at 17:55 on weekdays and 08:55 on Saturdays
-and Sundays, in Pacific time (`America/Vancouver`). This allows use from
+and Sundays, in Pacific time (`America/Los_Angeles`). This allows use from
 **6 PM–10 PM Monday–Friday** and **9 AM–10 PM Saturday–Sunday**. The current
 local day's schedule determines when restrictions end, so Friday-night
 restrictions end Saturday at 9 AM and Sunday-night restrictions end Monday
@@ -80,7 +80,7 @@ The script recursively greps
 `/home/iapark/.local/share/containers/storage/volumes/claude-home/_data/projects`
 for `"origin":{"kind":"human"}`, then uses `jq` to sort matching JSON records
 by timestamp, latest first. If the latest ISO 8601 timestamp is strictly after
-the current window's 10 PM start in `America/Vancouver` (the previous date
+the current window's 10 PM start in `America/Los_Angeles` (the previous date
 when checking before that day's restriction cutoff), it kills `iapark`'s running
 **immich-tools devcontainer**. No matches or a missing projects directory do
 nothing; read errors, malformed JSON and invalid timestamps fail the check and
@@ -414,7 +414,7 @@ requires the separate `serve` mode and is not enabled here.
 
 systemd starts the watcher at boot, restarts it on failure, and captures its output
 in the journal. `claudelogs-restart.timer` also restarts the watcher daily at
-**03:00 Pacific (`America/Vancouver`)** to release accumulated process memory.
+**03:00 Pacific (`America/Los_Angeles`)** to release accumulated process memory.
 The timer invokes a separate oneshot service that runs
 `systemctl restart claudelogs.service`. The service must be able to download the
 latest tool from PyPI at startup. Puppet removes the former `/etc/cron.d/claudelogs`
