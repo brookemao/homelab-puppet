@@ -79,6 +79,19 @@ class homelab::ddclient (
     notify  => Service['ddclient'],
   }
 
+  # Service options read by the ddclient unit (EnvironmentFile). Point the
+  # daemon explicitly at the Puppet-managed config so it never falls back to
+  # a different default path (e.g. /etc/ddclient.conf).
+  file { '/etc/sysconfig/ddclient':
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    content => "DDCLIENT_OPTIONS=\"-daemon 300 -file /etc/ddclient/ddclient.conf\"\n",
+    require => $install_require,
+    notify  => Service['ddclient'],
+  }
+
   # Keep the managed zone's hostname list current even with replace => false.
   # Only the hostname-only line is replaced; saved credentials and options
   # remain intact. This profile manages one Cloudflare zone/config stanza.
@@ -205,6 +218,7 @@ class homelab::ddclient (
     $service_dependency = [
       Exec['install_ddclient_release_tar'],
       File['/etc/ddclient/ddclient.conf'],
+      File['/etc/sysconfig/ddclient'],
       File['/var/cache/ddclient'],
     ]
   } else {
@@ -216,6 +230,7 @@ class homelab::ddclient (
     $service_dependency = [
       Package['ddclient'],
       File['/etc/ddclient/ddclient.conf'],
+      File['/etc/sysconfig/ddclient'],
     ]
   }
 
